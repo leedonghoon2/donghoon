@@ -1,8 +1,8 @@
 import time
 import pyupbit
 
-access = "xBwyNQP5ox5ADdwucG2FBBFDxddf4mjpDwebnxan"
-secret = "wTj9MxwuYchfO4xhWmMfOxZxCs6SywiJPlfxXdVv"
+access = 
+secret = 
 upbit = pyupbit.Upbit(access, secret)
 
 # 매수 주문 함수
