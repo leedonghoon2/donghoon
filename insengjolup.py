@@ -35,13 +35,21 @@ error2 = 0
 
 # 설정값
 target_point =      # 익절 지점
-switching_point =   # 스위칭 지점
+switching_point =    # 스위칭 지점
 switching_ratio = 3      # 스위칭 배율
 switching_count = 6      # 스위칭 횟수
-leverage =               # 레버리지
+leverage =             # 레버리지
 symbol = 'BTC/USDT'      # 거래 코인
 token = ""
 chat_id = ''
+
+
+async def main_시작(): #실행시킬 함수명 임의지정 
+    bot = telegram.Bot(token)
+    await bot.send_message(chat_id, f"target_point = {target_point}\nswitching_point = {switching_point}\nswitching_ratio = {switching_ratio}\nswitching_count = {switching_count}\nleverage = {leverage}\nsymbol = {symbol}\n자동 매매를 시작합니다")
+
+
+asyncio.run(main_시작()) #봇 실행하는 코드
 
 
 while True:
