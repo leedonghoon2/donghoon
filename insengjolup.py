@@ -36,8 +36,8 @@ error2 = 0
 # 설정값
 target_point =     # 익절 지점
 switching_point =    # 스위칭 지점
-switching_ratio = 3      # 스위칭 배율
-switching_count = 6      # 스위칭 횟수
+switching_ratio =       # 스위칭 배율
+switching_count =       # 스위칭 횟수
 leverage =             # 레버리지
 symbol = 'BTC/BUSD'      # 거래 코인
 start = 
