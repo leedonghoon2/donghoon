@@ -34,12 +34,13 @@ error1 = 0
 error2 = 0
 
 # 설정값
-target_point =      # 익절 지점
+target_point =     # 익절 지점
 switching_point =    # 스위칭 지점
 switching_ratio = 3      # 스위칭 배율
 switching_count = 6      # 스위칭 횟수
 leverage =             # 레버리지
-symbol = 'BTC/USDT'      # 거래 코인
+symbol = 'BTC/BUSD'      # 거래 코인
+start = 
 token = ""
 chat_id = ''
 
@@ -57,9 +58,9 @@ while True:
     try:
         # 초기설정 (최소거래수량 확인 필요)
         balance = exchange.fetch_balance({'type':'future'})             # 선물 계좌로 변경
-        USDT_balance = balance['USDT']['free']                          # 계좌 잔고 조회
+        USDT_balance = balance['BUSD']['free']                          # 계좌 잔고 조회
         XRP_price = exchange.fetch_ticker(symbol)['last']               # 리플 현재가 조회
-        long_amount = ((USDT_balance * 0.01) * leverage) / XRP_price    # 초기 롱 물량(거래코인 최소거래수량 이상)
+        long_amount = ((USDT_balance * start * leverage) / XRP_price    # 초기 롱 물량(거래코인 최소거래수량 이상)
         short_amount = 0                                                # 초기 숏 물량
         count = 0                                                       # 카운팅
         reference_price = XRP_price                                     # 기준값 설정
@@ -84,7 +85,7 @@ while True:
         try:
             # USDT 잔고 및 비트코인 현재가 확인
             balance = exchange.fetch_balance({'type':'future'})
-            USDT_balance = balance['USDT']['free']
+            USDT_balance = balance['BUSD']['free']
             XRP_price = exchange.fetch_ticker(symbol)['last']
 
             # 숏 포지션 물량이 없고 비트코인의 현재가가 기준값의 -1%일 경우 숏 포지션 생성(롱 포지션 3배 물량)
