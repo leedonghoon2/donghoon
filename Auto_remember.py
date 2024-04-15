@@ -131,7 +131,7 @@ async def main_타겟가격_도달():
     while True:
         try:
             bot = telegram.Bot(token)
-            await bot.send_message(chat_id, f"롱 포지션 타겟 가격 도달\n다음 타겟 가격 : {last_trading_price + 익절갭}{stablecoin}\n현재 확보한 익절 갯수 : {count_누적-1}")
+            await bot.send_message(chat_id, f"포지션 타겟 가격 도달\n다음 타겟 가격 : {last_trading_price + 익절갭}{stablecoin}\n현재 확보한 익절 갯수 : {count_누적-1}")
             break
         except:
             await asyncio.sleep(timesleep)
