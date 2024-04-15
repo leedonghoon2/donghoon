@@ -33,8 +33,8 @@ count_누적 = 0
 익절물량_누적 = 0
 탈출_트리거 = 0
 
-익절갭 = 200
-구매갯수 = 0.0025
+익절갭 = 
+구매갯수 = 
 
 # 텔레그램 매크로 생성
 async def main_시작():
@@ -127,11 +127,21 @@ async def main_숏청산_롱스위칭():
             await asyncio.sleep(timesleep)
             continue
         
-async def main_타겟가격_도달():
+async def main_롱_타겟가격_도달():
     while True:
         try:
             bot = telegram.Bot(token)
-            await bot.send_message(chat_id, f"포지션 타겟 가격 도달\n다음 타겟 가격 : {last_trading_price + 익절갭}{stablecoin}\n현재 확보한 익절 갯수 : {count_누적-1}")
+            await bot.send_message(chat_id, f"롱 포지션 타겟 가격 도달\n다음 타겟 가격 : {last_trading_price + 익절갭}{stablecoin}\n현재 확보한 익절 갯수 : {count_누적-1}")
+            break
+        except:
+            await asyncio.sleep(timesleep)
+            continue
+        
+async def main_숏_타겟가격_도달():
+    while True:
+        try:
+            bot = telegram.Bot(token)
+            await bot.send_message(chat_id, f"숏 포지션 타겟 가격 도달\n다음 타겟 가격 : {last_trading_price - 익절갭}{stablecoin}\n현재 확보한 익절 갯수 : {count_누적-1}")
             break
         except:
             await asyncio.sleep(timesleep)
@@ -181,7 +191,7 @@ while True :
                             try:
                                 last_trading_price = last_trading_price + 익절갭
                                 count_누적 += 1
-                                asyncio.run(main_타겟가격_도달())
+                                asyncio.run(main_롱_타겟가격_도달())
                                 break
                             except:
                                 asyncio.run(main_타겟가격_재지정_에러())
@@ -230,7 +240,7 @@ while True :
                             try:
                                 last_trading_price = last_trading_price - 익절갭
                                 count_누적 += 1
-                                asyncio.run(main_타겟가격_도달())
+                                asyncio.run(main_숏_타겟가격_도달())
                                 break
                             except:
                                 asyncio.run(main_타겟가격_재지정_에러())
