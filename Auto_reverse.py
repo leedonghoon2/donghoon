@@ -242,6 +242,7 @@ while True :
                                 exchange.create_market_sell_order(symbol, 구매갯수, params)
                                 
                                 count_롱_보유갯수 -= 1
+                                count_익절 += 1
                                 asyncio.run(main_롱_매도_추적기_정산매매())
                                 
                                 break
@@ -266,6 +267,7 @@ while True :
                                 exchange.create_market_buy_order(symbol, 구매갯수, params)
                                 
                                 count_숏_보유갯수 -= 1
+                                count_익절 += 1
                                 asyncio.run(main_숏_매도_추적기_정산매매())
                                 
                                 break
