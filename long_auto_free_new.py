@@ -6,8 +6,8 @@ import datetime
 import os
 
 # 계좌 조회
-api_key = ''
-api_secret = ''
+api_key = '6xNvwqZ4p1O3Bsi19FQ3zRb4UtCM1ONBSqrTc6fOzC58btahJsnN3s3QNFEAvgEs'
+api_secret = '6tppC0ZfHSQ72xZ1NbZ5o4O85sOcWHegEj26ohdtzFZnCnw8nFrWS5mjHwM3hUDj'
 
 exchange = ccxt.binance({
     'apiKey': api_key,
@@ -23,8 +23,8 @@ exchange = ccxt.binance({
 symbol = '1000PEPE/USDC'
 stablecoin = 'USDC'
 
-token = ''
-chat_id = ''
+token = '6063760144:AAG07SX59Bj8JKNeg2d5sCGcLWENlcWInm4'
+chat_id = '1496944404'
 timesleep = 0
 
 롱_손절_물량 = 0
@@ -138,7 +138,7 @@ while True :
                         }
             exchange.create_limit_buy_order(symbol, 구매갯수, reference_price - 익절갭, params)
             reference_price = reference_price - 익절갭
-            count_롱_보유갯수 += 1
+            
             print("롱 지정가 주문 완료")
             while True :
                 try:
@@ -185,7 +185,7 @@ while True :
                                         exchange.cancel_order(id=last_order_id, symbol=symbol)
                                         short_order_found = True
                                         count_익절 += 1
-                                        count_롱_보유갯수 += 1
+                                        count_롱_보유갯수 -= 1
                                         asyncio.run(main_정산_매매())
                                         break
                                     except:
