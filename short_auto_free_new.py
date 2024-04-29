@@ -117,6 +117,7 @@ while True :
                     
                     숏_손절_물량 = (((손절_실행_계약수)-1) * (손절_실행_계약수))/2
                     count_익절 = count_익절 - 숏_손절_물량
+                    count_숏_보유갯수 -= 숏_청산_주문갯수
                     asyncio.run(main_숏_한계치도달())
                     break
                 except:
