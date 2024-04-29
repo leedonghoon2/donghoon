@@ -6,8 +6,8 @@ import datetime
 import os
 
 # 계좌 조회
-api_key = '6xNvwqZ4p1O3Bsi19FQ3zRb4UtCM1ONBSqrTc6fOzC58btahJsnN3s3QNFEAvgEs'
-api_secret = '6tppC0ZfHSQ72xZ1NbZ5o4O85sOcWHegEj26ohdtzFZnCnw8nFrWS5mjHwM3hUDj'
+api_key = ''
+api_secret = ''
 
 exchange = ccxt.binance({
     'apiKey': api_key,
@@ -23,8 +23,8 @@ exchange = ccxt.binance({
 symbol = '1000PEPE/USDC'
 stablecoin = 'USDC'
 
-token = '6063760144:AAG07SX59Bj8JKNeg2d5sCGcLWENlcWInm4'
-chat_id = '1496944404'
+token = ''
+chat_id = ''
 timesleep = 0
 
 롱_손절_물량 = 0
