@@ -114,7 +114,7 @@ while True :
                     params = {
                                 'positionSide': 'LONG'
                                 }
-                    exchange.create_market_buy_order(symbol, 구매갯수 * 손절_실행_계약수 , params)
+                    exchange.create_market_sell_order(symbol, 구매갯수 * 손절_실행_계약수 , params)
                     
                     롱_손절_물량 = (((손절_실행_계약수)-1) * (손절_실행_계약수))/2
                     count_익절 = count_익절 - 롱_손절_물량
