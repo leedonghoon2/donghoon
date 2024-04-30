@@ -39,6 +39,26 @@ last_order_id = 0
 구매갯수 = 15
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
+async def main_시작():
+    while True:
+        try:
+            bot = telegram.Bot(token)
+            await bot.send_message(chat_id, f"거래코인 = {symbol}\n스테이블 코인 = {stablecoin}\n익절갭 = {익절갭}\n코인 구매 단가 = {구매갯수}개")
+            break        
+        except:
+            await asyncio.sleep(timesleep)
+            continue
+        
+async def main_시작_에러(): #실행시킬 함수명 임의지정
+    while True:
+        try:
+            bot = telegram.Bot(token)
+            await bot.send_message(chat_id, "시작 과정에서 오류 발생...")
+            break
+        except:
+            await asyncio.sleep(timesleep)
+            continue
+        
 async def main_지정가_주문_에러(): #실행시킬 함수명 임의지정
     while True:
         try:
@@ -88,10 +108,11 @@ while True:
         symbol_price = exchange.fetch_ticker(symbol)['last']               # 코인 현재가 조회
         reference_price = symbol_price
         
+        asyncio.run(main_시작())
         break
     
     except:
-        asyncio.run(main_에러1()) #봇 실행하는 코드
+        asyncio.run(main_시작_에러()) 
         continue
 
 while True : 
