@@ -200,7 +200,7 @@ while True :
                                         asyncio.run(main_지정가_주문_갱신_에러())
                                         continue
                         
-                        count_익절 += 1
+                        count_익절 += ( 구매갯수 / 시작_구매갯수 )
                         count_숏_보유갯수 -= 1
                         reference_price = reference_price - (2 * 익절갭)
                         asyncio.run(main_정산_매매())
