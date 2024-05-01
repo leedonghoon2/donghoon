@@ -44,7 +44,7 @@ async def main_시작():
     while True:
         try:
             bot = telegram.Bot(token)
-            await bot.send_message(chat_id, f"거래코인 = {symbol}\n스테이블 코인 = {stablecoin}\n익절갭 = {익절갭}\n코인 구매 단가 = {구매갯수}개")
+            await bot.send_message(chat_id, f"거래코인 = {symbol}\n스테이블 코인 = {stablecoin}\n익절갭 = {익절갭}\n코인 구매 단가 = {시작_구매갯수}개")
             break        
         except:
             await asyncio.sleep(timesleep)
