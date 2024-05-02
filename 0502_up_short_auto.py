@@ -136,8 +136,6 @@ async def main_정산_매매(): #실행시킬 함수명 임의지정
 #--------------------------------------------------------------------------------------------------------------------------------------------
 while True :
     try:
-        exchange.cancel_all_orders(symbol=symbol)
-        
         구매갯수 = 0
         구매갯수_익절용 = 0
         count_롱_보유갯수 = 0
@@ -167,7 +165,8 @@ while True :
             try:
                 positions = exchange.fetch_positions(symbols=[symbol])
                 total_position_quantity = sum(position['contracts'] for position in positions)
-                if total_position_quantity == 0:
+                if total_position_quantity == 0 and count_익절 > 0:
+                    exchange.cancel_all_orders(symbol=symbol)
                     break
                 
                 if count_숏_보유갯수 < 구매갯수_변경_단위 :
@@ -176,7 +175,6 @@ while True :
                 else:
                     구매갯수 = 시작_구매갯수 * (count_숏_보유갯수 // 구매갯수_변경_단위 + 1)
                     구매갯수_익절용 = 시작_구매갯수 * (count_숏_보유갯수 // (구매갯수_변경_단위+1) + 1)
-                
                 while True :
                     try:    
                         숏_미체결_주문수 = 0
@@ -184,8 +182,8 @@ while True :
                         for order in 미체결주문:
                             if order['info']['positionSide'] == 'SHORT' and order['side'] == 'sell':
                                 숏_미체결_주문수 = sum(1 for order in 미체결주문 if order['info']['positionSide'] == 'SHORT' and order['side'] == 'sell')
-                                # print("숏 미체결 주문수는 :", 숏_미체결_주문수)
-                                break
+                                print("숏 미체결 주문수는 :", 숏_미체결_주문수)
+                        break
                     except:
                         asyncio.run(main_미체결_주문_확인_에러())
                         continue
