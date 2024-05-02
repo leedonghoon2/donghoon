@@ -166,7 +166,7 @@ while True:
             try:
                 positions = exchange.fetch_positions(symbols=[symbol])
                 total_position_quantity = sum(position['contracts'] for position in positions)
-                if total_position_quantity == 0:
+                if total_position_quantity == 0 and count_익절 > 0:
                     exchange.cancel_all_orders(symbol=symbol)
                     break
                         
