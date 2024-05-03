@@ -165,7 +165,7 @@ while True :
                 long_order_price = order['price']
                 
         if total_position_quantity == 0 and round(short_order_price - long_order_price,10) != 익절갭 :
-            timesleep(2)
+            time.sleep(2)
             
             미체결주문 = exchange.fetch_open_orders(symbol=symbol)
             for order in 미체결주문:
