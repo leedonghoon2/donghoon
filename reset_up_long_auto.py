@@ -25,8 +25,13 @@ stablecoin = 'USDC'
 
 token = ''
 chat_id = ''
-timesleep = 0
+익절갭 = 0.0006
+시작_구매갯수 = 15
+구매갯수_변경_단위 = 10
 
+timesleep = 0
+short_order_price = 0
+long_order_price = 0
 구매갯수 = 0
 구매갯수_익절용 = 0
 count_익절 = 0
@@ -37,9 +42,7 @@ last_order_id = 0
 롱_청산_주문갯수 = 0
 바이낸스_청산_주문갯수 = 0
 
-익절갭 = 0.0006
-시작_구매갯수 = 15
-구매갯수_변경_단위 = 15
+
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 async def main_시작():
@@ -153,12 +156,27 @@ while True :
     try:
         positions = exchange.fetch_positions(symbols=[symbol])
         total_position_quantity = sum(position['contracts'] for position in positions)
-        if total_position_quantity == 0 and count_익절 > 0:
-            exchange.cancel_all_orders(symbol=symbol)
+        
+        미체결주문 = exchange.fetch_open_orders(symbol=symbol)
+        for order in 미체결주문:
+            if order['info']['positionSide'] == 'SHORT':
+                short_order_price = order['price']
+            elif order['info']['positionSide'] == 'LONG':
+                long_order_price = order['price']
+                
+        if total_position_quantity == 0 and round(short_order_price - long_order_price,10) != 익절갭 :
+            timesleep(2)
+            
+            미체결주문 = exchange.fetch_open_orders(symbol=symbol)
+            for order in 미체결주문:
+                if order['info']['positionSide'] == 'LONG':
+                    exchange.cancel_order(order['id'], symbol=symbol)
             
             if count_롱_보유갯수 > 0 :
                 count_익절 += count_롱_보유갯수
             
+            short_order_price = 0
+            long_order_price = 0
             구매갯수 = 0
             구매갯수_익절용 = 0
             count_롱_보유갯수 = 0
