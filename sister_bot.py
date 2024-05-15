@@ -11,8 +11,8 @@ import re
 api_key = ''
 api_secret = ''
 
-token = ''
-chat_id = ''
+token = '6277404128:AAGoL8YfdkfRLRrt8OeOxBuIPwFgwRuOkjI'
+chat_id = '1002076075628'
 
 시작_코인_갯수 = 1
 업비트_코인_구매가격 = 700
@@ -71,7 +71,7 @@ async def main_정산(): #실행시킬 함수명 임의지정
     while True:
         try:
             bot = telegram.Bot(token)
-            await bot.send_message(chat_id, f"환율($) : {환율}￦\n현재 김프 : {formatted_김프}%\n누적 수익 코인 갯수 : {누적수익갯수_반올림}{symbol_delivery}\n누적 수익금($) : {누적수익금_달러_반올림}$\n누적 수익금(￦) : {누적수익금_원화_반올림}￦\n누적 수익률 : {누적수익률}%\n김프를 고려한 수익률 : {김프적용시수익률_반올림}%")
+            await bot.send_message(chat_id, f"환율($) : {환율}￦\n현재 김프 : {formatted_김프}%\n현재 코인 갯수 : {현재코인갯수}{symbol_delivery}\n---------------------------------\n누적 수익 코인 갯수 : {누적수익갯수_반올림}{symbol_delivery}\n누적 수익금($) : {누적수익금_달러_반올림}$\n누적 수익금(￦) : {누적수익금_원화_반올림}￦\n누적 수익률 : {누적수익률}%\n---------------------------------\n김프를 고려한 수익률 : {김프적용시수익률_반올림}%")
             break
         except:
             await asyncio.sleep(timesleep)
@@ -141,8 +141,17 @@ while True:
                 break
             except:
                 continue
+        
+        while True:
+            try:
+                balance_delivery = exchange_delivery.fetch_balance()
+                현재코인갯수 = round(balance_delivery[symbol_delivery]['total'],3)
+                break
+            except:
+                continue
             
         asyncio.run(main_정산())
+        
         time.sleep(28800)
     except:
         continue
