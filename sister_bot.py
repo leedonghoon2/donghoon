@@ -12,10 +12,10 @@ api_key = ''
 api_secret = ''
 
 token = '6277404128:AAGoL8YfdkfRLRrt8OeOxBuIPwFgwRuOkjI'
-chat_id = '1002076075628'
+chat_id = '-1002076075628'
 
-시작_코인_갯수 = 1
-업비트_코인_구매가격 = 700
+시작_코인_갯수 = 14482.7586
+업비트_코인_구매가격 = 725
 
 symbol_delivery = 'XRP'
 symbol_upbit = 'XRP/KRW'
@@ -71,7 +71,7 @@ async def main_정산(): #실행시킬 함수명 임의지정
     while True:
         try:
             bot = telegram.Bot(token)
-            await bot.send_message(chat_id, f"환율($) : {환율}￦\n현재 김프 : {formatted_김프}%\n현재 코인 갯수 : {현재코인갯수}{symbol_delivery}\n---------------------------------\n누적 수익 코인 갯수 : {누적수익갯수_반올림}{symbol_delivery}\n누적 수익금($) : {누적수익금_달러_반올림}$\n누적 수익금(￦) : {누적수익금_원화_반올림}￦\n누적 수익률 : {누적수익률}%\n---------------------------------\n김프를 고려한 수익률 : {김프적용시수익률_반올림}%")
+            await bot.send_message(chat_id, f"환율($) : {환율}￦\n현재 김프 : {formatted_김프}%\n현재 코인 갯수 : {현재코인갯수}{symbol_delivery}\n---------------------------------\n누적 수익금($) : {누적수익금_달러_반올림}$\n누적 수익금(￦) : {누적수익금_원화_반올림}￦\n누적 수익률 : {누적수익률}%\n---------------------------------\n김프를 고려한 수익률 : {김프적용시수익률_반올림}%")
             break
         except:
             await asyncio.sleep(timesleep)
@@ -108,15 +108,16 @@ while True:
                 balance_delivery = exchange_delivery.fetch_balance()
                 print(balance_delivery[symbol_delivery]['total'])
 
-                누적수익갯수 = (balance_delivery[symbol_delivery]['total'] - 시작_코인_갯수) # 리플 갯수
-                누적수익갯수_반올림 = round(balance_delivery[symbol_delivery]['total'] - 시작_코인_갯수,3) # 갯수
+                # 누적수익갯수 = (balance_delivery[symbol_delivery]['total'] - 시작_코인_갯수) # 리플 갯수
+                # 누적수익갯수_반올림 = round(balance_delivery[symbol_delivery]['total'] - 시작_코인_갯수,3) # 갯수
 
-                누적수익금_달러_반올림 = round(누적수익갯수 * binance_symbol_price,2) # 달러
-                누적수익금_달러 = (누적수익갯수 * binance_symbol_price)
+                 # 달러
+                누적수익금_달러 = ((balance_delivery * binance_symbol_price) - (시작_코인_갯수 * 업비트_코인_구매가격 / 환율))
+                누적수익금_달러_반올림 = round(누적수익금_달러,2)
 
                 누적수익금_원화_반올림 = round(누적수익금_달러 * 환율,3)  
-                누적수익률 = round((누적수익갯수 / 시작_코인_갯수) * 100,2) # %
-                print(누적수익갯수_반올림)
+                누적수익률 = round((누적수익금_원화_반올림/(시작_코인_갯수 * 업비트_코인_구매가격)),2) # %
+                
                 print(누적수익금_달러_반올림)
                 print(누적수익금_원화_반올림)
                 print(누적수익률)
