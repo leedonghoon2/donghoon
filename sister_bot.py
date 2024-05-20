@@ -71,7 +71,7 @@ async def main_정산(): #실행시킬 함수명 임의지정
     while True:
         try:
             bot = telegram.Bot(token)
-            await bot.send_message(chat_id, f"환율($) : {환율}￦\n현재 김프 : {formatted_김프}%\n현재 코인 갯수 : {현재코인갯수}{symbol_delivery}\n---------------------------------\n누적 수익금($) : {누적수익금_달러_반올림}$\n누적 수익금(￦) : {누적수익금_원화_반올림}￦\n누적 수익률 : {누적수익률}%\n(단, 처음에 코인 전송 시 발생한 손실분 포함)\n---------------------------------\n김프를 고려한 수익률 : {김프적용시수익률_반올림}%\n현재 업비트로 전송 시 수익금 : {최종_수익금_반올림}￦")
+            await bot.send_message(chat_id, f"환율($) : {환율}￦\n현재 김프 : {formatted_김프}%\n현재 코인 갯수 : {현재코인갯수}{symbol_delivery}\n현재 바이낸스 시드($) : {현재_시드_반올림}$\n---------------------------------\n누적 수익금($) : {누적수익금_달러_반올림}$\n누적 수익금(￦) : {누적수익금_원화_반올림}￦\n누적 수익률 : {누적수익률}%\n(단, 처음에 코인 전송 시 발생한 손실분 포함)\n---------------------------------\n김프를 고려한 수익률 : {김프적용시수익률_반올림}%\n업비트로 전송 시 수익금 : {최종_수익금_반올림}￦\n---------------------------------\n수익률(김프고려) & 현재 김프 갭 : {김프고려수익률_김프_갭차이}%\n(위 %가 0이면 초기 김프만큼의 수익 발생)")
             break
         except:
             await asyncio.sleep(timesleep)
@@ -171,6 +171,21 @@ while True:
                 break
             except:
                 continue
+            
+        while True:
+            try:
+                balance_delivery = exchange_delivery.fetch_balance()
+                balance_delivery = balance_delivery[symbol_delivery]['total']
+                
+                binance_symbol_price = exchange_spot.fetch_ticker(symbol_spot)['last']
+                
+                현재_시드 = balance_delivery * binance_symbol_price
+                현재_시드_반올림 = round(현재_시드,3)
+                break
+            except:
+                continue
+        
+        김프고려수익률_김프_갭차이 = 김프적용시수익률_반올림 - round(김프,3)
         asyncio.run(main_정산())
         
         time.sleep(28800)
