@@ -1,180 +1,198 @@
-import requests
 import time
-import datetime
-import hmac
-import hashlib
-import json
+import requests
+from tqdm import tqdm
+from datetime import datetime, timedelta
+import ccxt
 import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
+import aiohttp
 
-# Binance API credentials
-API_KEY = ""
-API_SECRET = ""
+async def send_telegram_message(token, chat_id, message):
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+        payload = {"chat_id": chat_id, "text": message}
+        async with session.post(url, json=payload) as response:
+            if response.status != 200:
+                print(f"텔레그램 메시지 전송 실패: {response.status}")
 
-# Telegram bot token and chat ID
-TELEGRAM_TOKEN = ""
-TELEGRAM_CHAT_ID = "1496944404"
-
-# Base URLs
-BASE_URL = "https://fapi.binance.com"
-UPBIT_URL = "https://api.upbit.com/v1"
-
-# Trading configuration
-BET_AMOUNT = 10  # Amount in USDT for each trade
-
-# Telegram bot setup
-bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher(bot)
-
-# Helper functions for Binance API requests
-def binance_signed_request(method, endpoint, params):
-    query_string = "&".join([f"{key}={value}" for key, value in params.items()])
-    signature = hmac.new(API_SECRET.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
-    headers = {"X-MBX-APIKEY": API_KEY}
-    url = f"{BASE_URL}{endpoint}?{query_string}&signature={signature}"
-
-    if method == "POST":
-        response = requests.post(url, headers=headers)
-    elif method == "GET":
-        response = requests.get(url, headers=headers)
-    else:
-        raise ValueError("지원되지 않는 요청 메서드입니다.")
-
-    response.raise_for_status()
-    return response.json()
-
-def place_binance_order(ticker, action, amount):
-    # Modify to handle short position logic
-    if action == "SHORT":
-        side = "SELL"  # 공매도 포지션 열기
-    elif action == "CLOSE_SHORT":
-        side = "BUY"  # 공매도 포지션 닫기
-    else:
-        raise ValueError("공매도 포지션에 대한 지원되지 않는 작업입니다.")
-
-    params = {
-        "symbol": f"{ticker}USDT",
-        "side": side,
-        "type": "MARKET",
-        "quantity": amount,
-        "timestamp": int(time.time() * 1000)
-    }
+def get_binance_futures_symbols():
     try:
-        response = binance_signed_request("POST", "/fapi/v1/order", params)
-        asyncio.run(send_telegram_message(f"{action} 주문이 성공적으로 실행되었습니다: {response}"))
-    except Exception as e:
-        asyncio.run(send_telegram_message(f"{ticker}에 대한 {action} 주문 오류: {e}"))
+        # 바이낸스 선물 API 호출
+        url = "https://fapi.binance.com/fapi/v1/exchangeInfo"
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
 
-async def send_telegram_message(message):
+        # 모든 선물 심볼 추출
+        futures_symbols = {symbol['baseAsset'] for symbol in data['symbols']}
+        print(f"바이낸스 선물 심볼 가져오기 완료: {len(futures_symbols)}개 심볼 발견.")
+        return futures_symbols
+
+    except Exception as e:
+        print(f"오류 발생: {e}")
+        return set()
+
+def get_upbit_krw_symbols():
     try:
-        await bot.send_message(TELEGRAM_CHAT_ID, message)
+        # 업비트 API에서 마켓 목록 가져오기
+        url = "https://api.upbit.com/v1/market/all"
+        response = requests.get(url)
+        response.raise_for_status()
+        markets = response.json()
+
+        # 원화 시장 심볼 필터링
+        krw_symbols = {market['market'].split('-')[1] for market in markets if market['market'].startswith('KRW-')}
+        print(f"업비트 KRW 심볼 가져오기 완료: {len(krw_symbols)}개 심볼 발견.")
+        return krw_symbols
+
     except Exception as e:
-        print(f"텔레그램 메시지 전송 오류: {e}")
+        print(f"오류 발생: {e}")
+        return set()
 
-def get_upbit_krw_tickers():
-    url = f"{UPBIT_URL}/market/all"
-    response = requests.get(url)
-    response.raise_for_status()
-
-    markets = response.json()
-    krw_tickers = [market['market'].replace("KRW-", "") for market in markets if market['market'].startswith("KRW-")]
-    return krw_tickers
-
-def get_binance_futures_tickers():
-    url = f"{BASE_URL}/fapi/v1/exchangeInfo"
-    response = requests.get(url)
-    response.raise_for_status()
-
-    symbols = response.json()['symbols']
-    futures_tickers = [symbol['baseAsset'] for symbol in symbols]
-    return futures_tickers
-
-def find_common_tickers(upbit_tickers, binance_tickers):
-    common_tickers = list(set(upbit_tickers) & set(binance_tickers))
-    return common_tickers
-
-def get_upbit_hourly_data(ticker):
-    url = f"{UPBIT_URL}/candles/minutes/60?market=KRW-{ticker}&count=11"
-    response = requests.get(url)
-    if response.status_code == 200:
+def get_upbit_candles(symbol, count=15):
+    try:
+        # 업비트 API에서 1시간봉 데이터 가져오기
+        url = f"https://api.upbit.com/v1/candles/minutes/60?market=KRW-{symbol}&count={count}"
+        response = requests.get(url)
+        response.raise_for_status()
         candles = response.json()
+
+        # 거래량 및 변동률 데이터 추출
         volumes = [candle['candle_acc_trade_volume'] for candle in candles]
-        price_changes = [(candle['trade_price'] - candle['opening_price']) / candle['opening_price'] for candle in candles]
+        price_changes = [(candle['trade_price'] - candle['opening_price']) / candle['opening_price'] * 100 for candle in candles]
+        print(f"{symbol} 캔들 데이터 가져오기 완료: {len(candles)}개 레코드 발견.")
         return volumes, price_changes
-    else:
+
+    except Exception as e:
+        print(f"오류 발생: {e}")
         return [], []
 
-def filter_tickers_by_conditions(tickers):
-    significant_tickers = []
+def open_short_position(exchange, symbol, margin_usd, open_positions):
+    try:
+        # 코인 시장 정보 가져오기
+        exchange.load_markets()  # 바이낸스 시장 데이터 로드
+        market = exchange.market(symbol)
 
-    for ticker in tickers:
-        try:
-            volumes, price_changes = get_upbit_hourly_data(ticker)
-            if len(volumes) == 11 and len(price_changes) == 11:
-                recent_volume = volumes[0]
-                avg_volume = sum(volumes[1:]) / 10
-                recent_price_change = price_changes[0]
+        # 마진을 기준으로 포지션 크기 계산
+        price = exchange.fetch_ticker(symbol)['last']  # 현재 시장 가격
+        amount = margin_usd / price  # USD 마진을 바탕으로 수량 계산
 
-                if recent_volume > 7 * avg_volume and recent_price_change > 0:
-                    significant_tickers.append(ticker)
+        # 숏 포지션 열기 (시장가 매도)
+        order = exchange.create_order(
+            symbol=symbol,
+            type='market',
+            side='sell',
+            amount=amount
+        )
 
-            time.sleep(0.1)  # API 호출 제한 방지를 위해 딜레이 추가
-        except Exception as e:
-            asyncio.run(send_telegram_message(f"티커 {ticker} 데이터 처리 중 오류 발생: {e}"))
+        # 포지션 목록에 추가
+        open_positions.append({
+            'symbol': symbol,
+            'opened_at': datetime.now(),
+            'order': order,
+            'margin': margin_usd
+        })
 
-    return significant_tickers
+        print(f"{symbol} 숏 포지션 열기 성공: {order}")
+        return order
+    except Exception as e:
+        print(f"{symbol} 포지션 열기 오류: {e}")
+        return None
 
-async def monitor_market():
-    open_positions = {}
+def close_position(exchange, position):
+    try:
+        symbol = position['symbol']
+        amount = position['order']['amount']
 
-    # 시작 메시지 전송
-    await send_telegram_message("자동 매매 봇이 시작되었습니다. 시장을 모니터링 중입니다...")
+        # 포지션 청산 (시장가 매수)
+        order = exchange.create_order(
+            symbol=symbol,
+            type='market',
+            side='buy',
+            amount=amount
+        )
+
+        print(f"{symbol} 포지션 청산 성공: {order}")
+        return order
+    except Exception as e:
+        print(f"{symbol} 포지션 청산 오류: {e}")
+        return None
+
+async def main():
+    # Telegram 설정
+    telegram_token = ""
+    chat_id = ""
+
+    # 바이낸스 API 키와 시크릿 키 설정
+    api_key = ''
+    api_secret = ''
+
+    # 진입 금액 설정 (USD)
+    entry_amount_usd = 10  # 원하는 금액으로 설정
+
+    # CCXT를 사용하여 바이낸스 선물 계좌 설정
+    exchange = ccxt.binance({
+        'apiKey': api_key,
+        'secret': api_secret,
+        'options': {
+            'defaultType': 'future',  # 선물 시장을 사용
+        },
+    })
+
+    exchange.load_markets()  # 바이낸스 시장 데이터 로드
+
+    binance_symbols = get_binance_futures_symbols()
+    upbit_symbols = get_upbit_krw_symbols()
+
+    # 교집합 계산
+    common_symbols = binance_symbols & upbit_symbols
+    print(f"교집합 심볼 발견: {len(common_symbols)}개 심볼.")
+
+    # 열린 포지션 관리 리스트
+    open_positions = []
 
     while True:
-        try:
-            now = datetime.datetime.now()
-            seconds_until_next_hour = 3600 - (now.minute * 60 + now.second)
-            await send_telegram_message(f"다음 시간까지 대기 중... {seconds_until_next_hour}초")
-            await asyncio.sleep(seconds_until_next_hour)
+        print("새로운 사이클 시작.")
+        start_time = datetime.now()
+        next_run_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        surged_symbols = []
 
-            # 매 시간 티커 데이터 가져오기
-            upbit_tickers = get_upbit_krw_tickers()
-            binance_tickers = get_binance_futures_tickers()
+        for symbol in tqdm(sorted(common_symbols), desc="심볼 처리 중"):
+            volumes, price_changes = get_upbit_candles(symbol)
+            if len(volumes) > 10 and len(price_changes) > 1:
+                recent_volume = volumes[0]  # 가장 최근 거래량
+                average_volume = sum(volumes[1:11]) / 10  # 직전 10개 거래량의 평균
+                recent_change = price_changes[0]  # 가장 최근 변동률
+                if recent_volume >= 7 * average_volume and recent_change > 0:
+                    surged_symbols.append(symbol)
+            await asyncio.sleep(0.2)  # 요청 간 딜레이 추가
 
-            common_tickers = find_common_tickers(upbit_tickers, binance_tickers)
-            await send_telegram_message(f"공통 티커: {common_tickers}")
+        print(f"거래량 급등 코인: {surged_symbols}")
+        await send_telegram_message(telegram_token, chat_id, f"거래량 급등 및 변동률 양수인 코인: {surged_symbols}")
 
-            # 조건 만족 티커 필터링
-            significant_tickers = filter_tickers_by_conditions(common_tickers)
+        # 숏 포지션 열기
+        for symbol in surged_symbols:
+            binance_symbol = f"{symbol}USDT"
+            order = open_short_position(exchange, binance_symbol, entry_amount_usd, open_positions)
+            if order:
+                print(f"{binance_symbol} 포지션 열림.")
+                await send_telegram_message(telegram_token, chat_id, f"{binance_symbol} 숏 포지션 열림: {order}")
 
-            await send_telegram_message(f"조건에 부합하는 티커: {significant_tickers}")
+        # 열린 포지션 청산
+        for position in open_positions[:]:
+            opened_at = position['opened_at']
+            if datetime.now() - opened_at >= timedelta(hours=3):
+                order = close_position(exchange, position)
+                if order:
+                    print(f"{position['symbol']} 포지션 청산됨.")
+                    await send_telegram_message(telegram_token, chat_id, f"{position['symbol']} 포지션 청산됨: {order}")
+                open_positions.remove(position)
 
-            # 조건 만족 티커 주문 실행
-            for ticker in significant_tickers:
-                if ticker not in open_positions:
-                    open_positions[ticker] = []
-                place_binance_order(ticker, "SHORT", BET_AMOUNT)  # 공매도 포지션 열기
-                open_positions[ticker].append(now + datetime.timedelta(hours=3))
-
-            # 3시간 후 포지션 청산 확인
-            for ticker, close_times in list(open_positions.items()):
-                for close_time in list(close_times):
-                    if now >= close_time:
-                        place_binance_order(ticker, "CLOSE_SHORT", BET_AMOUNT)  # 공매도 포지션 닫기
-                        close_times.remove(close_time)
-                if not close_times:
-                    del open_positions[ticker]
-
-            # 현재 포지션 정보 전송
-            await send_telegram_message(f"현재 포지션: {open_positions}")
-
-        except Exception as e:
-            await send_telegram_message(f"시스템 오류 발생: {e}")
+        now = datetime.now()
+        wait_time = (next_run_time - now).total_seconds()
+        if wait_time > 0:
+            print(f"다음 사이클까지 {wait_time:.2f}초 대기 중.")
+            await send_telegram_message(telegram_token, chat_id, f"다음 사이클까지 {wait_time:.2f}초 대기 중.")
+            await asyncio.sleep(wait_time)
 
 if __name__ == "__main__":
-    try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(monitor_market())
-    except Exception as e:
-        asyncio.run(send_telegram_message(f"프로그램 실행 중 치명적 오류 발생: {e}"))
+    asyncio.run(main())
