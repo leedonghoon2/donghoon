@@ -130,12 +130,12 @@ def close_position(exchange, position):
 
 async def main():
     # Telegram 설정
-    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5o"
-    chat_id = "1496944404"
+    telegram_token = ""
+    chat_id = ""
 
     # 바이낸스 API 키와 시크릿 키 설정
-    api_key = '3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fs'
-    api_secret = 'hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziH'
+    api_key = ''
+    api_secret = ''
 
     # 진입 금액 설정 (USD)
     entry_amount_usd = 10  # 원하는 금액으로 설정
