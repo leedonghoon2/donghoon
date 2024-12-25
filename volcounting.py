@@ -42,20 +42,25 @@ def get_upbit_krw_symbols():
 
 def get_upbit_candles(symbol, count=15):
     try:
-        # 18시 기준으로 데이터 요청
+        # 현재 시간 기준으로 직전 마감 봉 가져오기
         target_time = datetime.now().replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
         to_time = target_time.strftime("%Y-%m-%dT%H:%M:%S")
+        
+        # 업비트 API 호출
         url = f"https://api.upbit.com/v1/candles/minutes/60?market=KRW-{symbol}&count={count}&to={to_time}Z"
         response = requests.get(url)
         response.raise_for_status()
         candles = response.json()
 
-        # 반환 데이터: 거래량, 변동률
+        # 거래량 리스트
         volumes = [candle['candle_acc_trade_volume'] for candle in candles]
+
+        # 변동률 계산: (종가 - 시가) / 시가 * 100
         price_changes = [
             (candle['trade_price'] - candle['opening_price']) / candle['opening_price'] * 100
             for candle in candles
         ]
+
         print(f"{symbol} 캔들 데이터 가져오기 완료: {len(candles)}개 레코드 발견.")
         return volumes, price_changes
     except Exception as e:
@@ -139,14 +144,14 @@ async def main():
         for symbol in tqdm(sorted(common_symbols), desc="심볼 처리 중"):
             volumes, price_changes = get_upbit_candles(symbol)
             if len(volumes) > 10 and len(price_changes) > 10:
-                # 18시 봉의 거래량 및 변동률
-                recent_volume = volumes[0]  # 18시 봉 거래량
-                recent_change = price_changes[0]  # 18시 봉 변동률
+                # 직전 마감 봉의 거래량 및 변동률
+                recent_volume = volumes[0]  # 직전 마감 봉 거래량
+                recent_change = price_changes[0]  # 직전 마감 봉 변동률
 
-                # 8~17시 봉 거래량 평균 계산
+                # 직전 10개 봉 평균 거래량 계산
                 average_volume = sum(volumes[1:11]) / 10
 
-                # 조건: 18시 봉 거래량이 8~17시 봉 평균의 7배 이상이고, 변동률 양수
+                # 조건: 직전 마감 봉 거래량이 직전 10개 평균의 7배 이상이고, 변동률 양수
                 if recent_volume >= 7 * average_volume and recent_change > 0:
                     surged_symbols.append(symbol)
 
