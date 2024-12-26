@@ -14,6 +14,12 @@ async def send_telegram_message(token, chat_id, message):
             if response.status != 200:
                 print(f"텔레그램 메시지 전송 실패: {response.status}")
 
+async def send_long_telegram_message(token, chat_id, message):
+    max_length = 4000  # 텔레그램 메시지 제한보다 조금 작게 설정
+    for i in range(0, len(message), max_length):
+        chunk = message[i:i + max_length]
+        await send_telegram_message(token, chat_id, chunk)
+
 def get_binance_futures_symbols():
     try:
         # 바이낸스 선물 API 호출
@@ -194,7 +200,7 @@ async def main():
 
         # 모든 코인 정보를 하나의 메시지로 합침
         combined_message = "\n\n".join(all_messages)
-        await send_telegram_message(telegram_token, chat_id, combined_message)
+        await send_long_telegram_message(telegram_token, chat_id, combined_message)
 
         print(f"매매 대상 코인: {trading_list}")
         await send_telegram_message(telegram_token, chat_id, f"매매 대상 코인: {trading_list}")
@@ -225,7 +231,3 @@ async def main():
         if wait_time > 0:
             print(f"다음 사이클까지 {wait_time:.2f}초 대기 중.")
             await send_telegram_message(telegram_token, chat_id, f"다음 사이클까지 {wait_time:.2f}초 대기 중.")
-            await asyncio.sleep(wait_time)
-
-if __name__ == "__main__":
-    asyncio.run(main())
