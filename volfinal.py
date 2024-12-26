@@ -74,11 +74,21 @@ def get_previous_hour_candles(symbol, count=11):
         print(f"{symbol} 직전 10개 봉의 거래량 리스트: {previous_volumes}")
         print(f"{symbol} 직전 10개 봉의 거래량 평균: {average_volume}")
 
-        return target_volume, previous_volumes, target_change
+        # 텔레그램 메시지로 보낼 내용 준비
+        message = (
+            f"[코인: {symbol}]\n"
+            f"기준봉 시간: {formatted_time}\n"
+            f"기준봉 거래량: {target_volume}\n"
+            f"기준봉 변동률: {target_change:.2f}%\n"
+            f"직전 10개 봉 거래량 리스트: {previous_volumes}\n"
+            f"직전 10개 봉 거래량 평균: {average_volume}"
+        )
+
+        return target_volume, previous_volumes, target_change, message
 
     except Exception as e:
         print(f"{symbol} 캔들 데이터 가져오기 오류: {e}")
-        return None, [], 0
+        return None, [], 0, ""
 
 def open_short_position(exchange, symbol, margin_usd, open_positions):
     try:
@@ -172,11 +182,13 @@ async def main():
         trading_list = []
 
         for symbol in tqdm(sorted(common_symbols), desc="심볼 처리 중"):
-            target_volume, previous_volumes, target_change = get_previous_hour_candles(symbol)
+            target_volume, previous_volumes, target_change, message = get_previous_hour_candles(symbol)
             if target_volume and len(previous_volumes) == 10:
                 average_volume = sum(previous_volumes) / len(previous_volumes)
                 if target_volume >= 7 * average_volume and target_change > 0:
                     trading_list.append(symbol)
+                # 텔레그램 메시지 전송
+                await send_telegram_message(telegram_token, chat_id, message)
             await asyncio.sleep(0.2)  # 요청 간 딜레이 추가
 
         print(f"매매 대상 코인: {trading_list}")
