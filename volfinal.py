@@ -180,6 +180,7 @@ async def main():
         start_time = datetime.now()
         next_run_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         trading_list = []
+        all_messages = []  # 모든 코인 메시지를 저장할 리스트
 
         for symbol in tqdm(sorted(common_symbols), desc="심볼 처리 중"):
             target_volume, previous_volumes, target_change, message = get_previous_hour_candles(symbol)
@@ -187,9 +188,13 @@ async def main():
                 average_volume = sum(previous_volumes) / len(previous_volumes)
                 if target_volume >= 7 * average_volume and target_change > 0:
                     trading_list.append(symbol)
-                # 텔레그램 메시지 전송
-                await send_telegram_message(telegram_token, chat_id, message)
+            # 개별 메시지를 all_messages 리스트에 저장
+            all_messages.append(message)
             await asyncio.sleep(0.2)  # 요청 간 딜레이 추가
+
+        # 모든 코인 정보를 하나의 메시지로 합침
+        combined_message = "\n\n".join(all_messages)
+        await send_telegram_message(telegram_token, chat_id, combined_message)
 
         print(f"매매 대상 코인: {trading_list}")
         await send_telegram_message(telegram_token, chat_id, f"매매 대상 코인: {trading_list}")
