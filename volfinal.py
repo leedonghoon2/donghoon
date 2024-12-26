@@ -122,6 +122,7 @@ def open_short_position(exchange, symbol, margin_usd, open_positions):
             'opened_at': datetime.now(),
             'order': order,
             'margin': margin_usd,
+            'amount': amount,  # 추가: 매수된 수량 저장
             'alert_count': 0
         })
         return order
@@ -132,7 +133,7 @@ def open_short_position(exchange, symbol, margin_usd, open_positions):
 def close_position(exchange, position):
     try:
         symbol = position['symbol']
-        amount = position['order']['amount']
+        amount = position['amount']  # 포지션에 저장된 개별 수량만 청산
         order = exchange.create_order(
             symbol=symbol,
             type='market',
@@ -191,7 +192,7 @@ async def main():
 
         for position in open_positions[:]:
             position['alert_count'] += 1
-            if position['alert_count'] == 3:
+            if position['alert_count'] == 4:
                 order = close_position(exchange, position)
                 if order:
                     await log_and_notify(f"{position['symbol']} 포지션 청산됨: {order}", telegram_token, chat_id)
