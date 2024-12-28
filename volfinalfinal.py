@@ -158,11 +158,11 @@ def close_position(exchange, position):
         return None
 
 async def main():
-    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5o"
-    chat_id = "1496944404"
+    telegram_token = ""
+    chat_id = ""
 
-    api_key = '3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fs'
-    api_secret = 'hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziH'
+    api_key = ''
+    api_secret = ''
 
     entry_amount_usd = 10
 
