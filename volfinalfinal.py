@@ -158,13 +158,13 @@ def close_position(exchange, position):
         return None
 
 async def main():
-    telegram_token = ""
-    chat_id = ""
+    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5o"
+    chat_id = "1496944404"
 
-    api_key = ''
-    api_secret = ''
+    api_key = '3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fs'
+    api_secret = 'hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziH'
 
-    entry_amount_usd = 100
+    entry_amount_usd = 10
 
     exchange = ccxt.binance({
         'apiKey': api_key,
