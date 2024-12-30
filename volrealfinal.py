@@ -6,6 +6,11 @@ import ccxt
 import asyncio
 import aiohttp
 import pandas as pd
+from pytz import timezone
+
+def get_kst_now():
+    kst = timezone('Asia/Seoul')
+    return datetime.now(kst)
 
 async def send_telegram_message(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -196,7 +201,7 @@ async def main():
         start_time = datetime.now()
         next_run_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         trading_list = []
-        time_mismatch_list = []  # 시간 불일치 리스트를 선언
+        time_mismatch_list = ["XRP"]  # 시간 불일치 리스트를 선언
 
         for symbol in tqdm(sorted(common_symbols), desc="심볼 처리 중"):
             target_volume, previous_volumes, average_volume, volume_threshold, target_change, mismatch = get_previous_hour_candles(
