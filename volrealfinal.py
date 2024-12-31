@@ -247,7 +247,11 @@ async def main():
                 await asyncio.sleep(0.2)
             if time_mismatch_list:
                 await asyncio.sleep(1)  # 시간 불일치 재확인 전 대기 시간
-                
+
+        # 반복문 밖에서 resolved_trading_list 초기화
+        if "resolved_trading_list" not in locals():
+            resolved_trading_list = []
+        
         await log_and_notify(f"시간 불일치 해소 후 매매 대상 코인: {resolved_trading_list}", telegram_token, chat_id)
         
         # 정상적으로 열린 포지션에 대해 alert_count 관리
