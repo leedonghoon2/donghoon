@@ -244,13 +244,12 @@ async def main():
                                 await log_and_notify(f"{binance_symbol} 숏 포지션 열림: {order}", telegram_token, chat_id)
                     await log_and_notify(f"{symbol} 시간 불일치 해소됨.", telegram_token, chat_id)
                     time_mismatch_list.remove(symbol)  # 시간 불일치 해소된 심볼 제거
-
-            
-            await log_and_notify(f"시간 불일치 해소 후 매매 대상 코인: {resolved_trading_list}", telegram_token, chat_id)
-
+                await asyncio.sleep(0.2)
             if time_mismatch_list:
                 await asyncio.sleep(1)  # 시간 불일치 재확인 전 대기 시간
-
+                
+        await log_and_notify(f"시간 불일치 해소 후 매매 대상 코인: {resolved_trading_list}", telegram_token, chat_id)
+        
         # 정상적으로 열린 포지션에 대해 alert_count 관리
         for position in open_positions[:]:
             position['alert_count'] += 1
