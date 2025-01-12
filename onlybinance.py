@@ -157,11 +157,11 @@ async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles):
     return valid_symbols
 
 async def main():
-    telegram_token = ""  # Telegram 봇 토큰을 입력하세요.
-    chat_id = ""  # Telegram Chat ID를 입력하세요.
+    telegram_token = ""
+    chat_id = ""
 
-    api_key = ""  # 바이낸스 API 키를 입력하세요.
-    api_secret = ""  # 바이낸스 API 비밀 키를 입력하세요.
+    api_key = ""
+    api_secret = ""
 
     entry_amount_usd = 100  # 각 거래의 진입 금액 (USD 기준)
 
