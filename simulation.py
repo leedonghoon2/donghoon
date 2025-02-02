@@ -2,6 +2,7 @@ import asyncio
 import ccxt
 from datetime import datetime, timedelta
 import aiohttp
+import math
 
 # 텔레그램 메시지 발송 함수
 async def send_telegram_message(token, chat_id, message):
@@ -16,8 +17,35 @@ async def log_and_notify(message, telegram_token, chat_id):
     print(message)
     await send_telegram_message(telegram_token, chat_id, message)
 
+# 타임프레임 문자열(e.g. '1m', '5m', '1h', '1d')를 timedelta로 변환하는 함수
+def get_timeframe_timedelta(timeframe_str):
+    try:
+        num = int(timeframe_str[:-1])
+    except ValueError:
+        num = 1
+    unit = timeframe_str[-1].lower()
+    if unit == 'm':
+        return timedelta(minutes=num)
+    elif unit == 'h':
+        return timedelta(hours=num)
+    elif unit == 'd':
+        return timedelta(days=num)
+    else:
+        return timedelta(minutes=1)
+
+# 현재 시간(now)과 타임프레임(delta)을 받아 다음 실행 시각을 계산하는 함수
+def get_next_run_time(now, delta):
+    # 기준: 1970-01-01부터 경과한 초
+    epoch = datetime(1970, 1, 1)
+    seconds_since_epoch = (now - epoch).total_seconds()
+    period = delta.total_seconds()
+    # 만약 현재 시각이 딱 맞아떨어지면 바로 다음 타임프레임으로 설정
+    next_multiple = math.floor(seconds_since_epoch / period + 1) * period
+    next_run_time = epoch + timedelta(seconds=next_multiple)
+    return next_run_time
+
 # 바이낸스에서 캔들 데이터를 가져오는 함수
-def fetch_binance_candles(exchange, symbol, timeframe='1h', limit=12):
+def fetch_binance_candles(exchange, symbol, timeframe, limit=12):
     try:
         candles = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
         return candles
@@ -29,7 +57,7 @@ def fetch_binance_candles(exchange, symbol, timeframe='1h', limit=12):
 def analyze_candles(candles, num_candles):
     if len(candles) < num_candles + 2:
         return None, None, None, None, []
-    target_candle = candles[-2]  # 직전 1시간 캔들
+    target_candle = candles[-2]  # 선택된 타임프레임의 직전 캔들
     previous_candles = candles[-(num_candles + 2):-2]
     previous_volumes = [candle[5] for candle in previous_candles]
     average_volume = sum(previous_volumes) / len(previous_volumes)
@@ -40,9 +68,9 @@ def analyze_candles(candles, num_candles):
     target_change = (closing_price - opening_price) / opening_price * 100
     return target_volume, average_volume, volume_threshold, target_change, previous_volumes
 
-# 심볼 당 캔들 데이터 처리 함수
-async def process_symbol(symbol, exchange, num_candles):
-    candles = fetch_binance_candles(exchange, symbol, timeframe='1h', limit=num_candles+2)
+# 심볼 당 캔들 데이터 처리 함수 (타임프레임을 인자로 받음)
+async def process_symbol(symbol, exchange, num_candles, timeframe):
+    candles = fetch_binance_candles(exchange, symbol, timeframe, limit=num_candles + 2)
     if not candles:
         return None, None
     target_volume, average_volume, volume_threshold, target_change, previous_volumes = analyze_candles(candles, num_candles)
@@ -135,11 +163,11 @@ async def manage_open_positions(open_positions, exchange, telegram_token, chat_i
                 )
     return simulated_total_profit
 
-# 시간 불일치 심볼 재검증 함수
-async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles):
+# 시간 불일치 심볼 재검증 함수 (타임프레임 인자 추가)
+async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles, timeframe):
     valid_symbols = []
     for symbol in mismatched_symbols[:]:
-        candles = fetch_binance_candles(exchange, symbol, timeframe='1h', limit=num_candles+2)
+        candles = fetch_binance_candles(exchange, symbol, timeframe, limit=num_candles+2)
         if candles:
             target_volume, average_volume, volume_threshold, target_change, _ = analyze_candles(candles, num_candles)
             if target_volume >= volume_threshold and target_change > 0:
@@ -158,6 +186,9 @@ async def main():
     entry_amount_usd = 100   # 거래당 진입 금액 (USD)
     num_candles = 7          # 분석할 캔들 개수
     total_seed = 300        # 전체 시드 (초기 투자금)
+    
+    # 원하는 타임프레임 설정: 예) '1m' -> 1분봉, '5m' -> 5분봉, '1h' -> 1시간봉, '1d' -> 1일봉 등
+    candle_timeframe = '5m'  # 여기서 원하는 타임프레임으로 변경 가능
     
     simulated_total_profit = 0
     
@@ -185,11 +216,12 @@ async def main():
     
     while True:
         start_time = datetime.now()
-        # 정각 실행: 다음 정각 계산
-        next_run_time = start_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        # 타임프레임에 따른 실행 주기 계산
+        delta = get_timeframe_timedelta(candle_timeframe)
+        next_run_time = get_next_run_time(start_time, delta)
         
-        # 각 심볼의 캔들 데이터를 병렬로 처리
-        tasks = [process_symbol(symbol, exchange, num_candles=num_candles) for symbol in binance_symbols]
+        # 각 심볼의 캔들 데이터를 병렬로 처리 (타임프레임 적용)
+        tasks = [process_symbol(symbol, exchange, num_candles, candle_timeframe) for symbol in binance_symbols]
         results = await asyncio.gather(*tasks)
         
         trading_list = []
@@ -201,8 +233,8 @@ async def main():
                 else:
                     mismatched_symbols.append(symbol_name)
         
-        # 시간 불일치 심볼 재검증
-        resolved_symbols = await recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles)
+        # 시간 불일치 심볼 재검증 (타임프레임 적용)
+        resolved_symbols = await recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles, candle_timeframe)
         trading_list.extend(resolved_symbols)
         
         await log_and_notify(f"Trading candidates: {trading_list}", telegram_token, chat_id)
