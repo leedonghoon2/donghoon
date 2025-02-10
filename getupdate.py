@@ -3,11 +3,15 @@ import ccxt.async_support as ccxt  # 비동기 버전 사용
 from datetime import datetime, timedelta
 import aiohttp
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from io import BytesIO
 
-# 누적 수익 데이터를 기록할 리스트
-# 각 항목은 (시간, 누적 수익 (USD)) 형식입니다.
+# 누적 수익 데이터를 기록할 리스트 (각 항목: (시간, 누적 수익 (USD)))
 profit_history = []
+
+# ---------------------------
+# 텔레그램 관련 함수들
+# ---------------------------
 
 # 텔레그램 메시지 전송 함수
 async def send_telegram_message(token, chat_id, message):
@@ -34,7 +38,7 @@ async def log_and_notify(message, telegram_token, chat_id):
     print(message)
     await send_telegram_message(telegram_token, chat_id, message)
 
-# 누적 수익률 그래프 생성 및 전송 함수
+# 누적 수익률 그래프 생성 및 전송 함수 (X축, Y축 범위 지정 포함)
 async def send_profit_graph(telegram_token, chat_id):
     if not profit_history:
         await send_telegram_message(telegram_token, chat_id, "누적 수익 데이터가 없습니다.")
@@ -42,19 +46,40 @@ async def send_profit_graph(telegram_token, chat_id):
 
     # profit_history의 데이터 분리: 시간, 수익
     times, profits = zip(*profit_history)
-    plt.figure(figsize=(10, 5))
-    plt.plot(times, profits, marker='o')
-    plt.title("누적 수익률")
-    plt.xlabel("시간")
-    plt.ylabel("누적 수익 (USD)")
+    
+    plt.figure(figsize=(12, 6))
+    plt.style.use("seaborn-darkgrid")
+    plt.plot(times, profits, marker='D', color='blue', linestyle='-', linewidth=2, markersize=6)
+    plt.title("누적 수익률", fontsize=16)
+    plt.xlabel("시간", fontsize=14)
+    plt.ylabel("누적 수익 (USD)", fontsize=14)
+    
+    # X축: 최소값은 profit_history의 첫 번째 시간, 최대값은 현재 시각
+    x_min = times[0]
+    x_max = datetime.now()
+    plt.xlim(x_min, x_max)
+    
+    # Y축: 최소값은 기록된 누적 수익의 최소값, 최대값은 최대값
+    y_min = min(profits)
+    y_max = max(profits)
+    if y_min == y_max:
+        y_min -= 1
+        y_max += 1
+    plt.ylim(y_min, y_max)
+    
+    # x축 날짜 포맷 자동 조정 및 지정
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+    
     plt.grid(True)
     buf = BytesIO()
-    plt.savefig(buf, format='png')
+    plt.savefig(buf, format='png', bbox_inches="tight")
     buf.seek(0)
     plt.close()
+    
     await send_telegram_photo(telegram_token, chat_id, buf.read(), caption="누적 수익률 그래프")
 
-# 텔레그램 업데이트(메시지)를 폴링하는 함수
+# 텔레그램 업데이트 폴링 함수: "수익률 확인" 메시지를 감지하면 그래프 전송
 async def poll_telegram_updates(telegram_token, chat_id):
     last_update_id = None
     while True:
@@ -76,11 +101,11 @@ async def poll_telegram_updates(telegram_token, chat_id):
                                         await send_profit_graph(telegram_token, chat_id)
         except Exception as e:
             print("Error in poll_telegram_updates:", e)
-        await asyncio.sleep(5)  # 5초마다 폴링
+        await asyncio.sleep(5)
 
-# -------------------------------
-# 이하부터 기존 시뮬레이션 거래 코드
-# -------------------------------
+# ---------------------------
+# 거래 시뮬레이션 관련 함수들
+# ---------------------------
 
 # 타임프레임 문자열(e.g. '1m', '5m', '1h', '1d')를 timedelta로 변환
 def get_timeframe_timedelta(timeframe_str):
@@ -98,7 +123,7 @@ def get_timeframe_timedelta(timeframe_str):
     else:
         return timedelta(minutes=1)
 
-# 비동기 방식으로 Binance 캔들 데이터를 가져오는 함수 (rate limit 에러 처리 포함)
+# 비동기 방식으로 Binance 캔들 데이터를 가져오는 함수 (rate limit 처리 포함)
 async def fetch_binance_candles(exchange, symbol, timeframe, limit=12, semaphore=None, telegram_token="", chat_id=""):
     while True:
         try:
@@ -118,7 +143,7 @@ async def fetch_binance_candles(exchange, symbol, timeframe, limit=12, semaphore
                 print(f"Error fetching candles for {symbol}: {e}")
                 return []
 
-# 캔들 데이터를 분석하는 함수
+# 캔들 데이터 분석 함수
 def analyze_candles(candles, num_candles):
     if len(candles) < num_candles + 2:
         return None, None, None, None, []
@@ -153,7 +178,7 @@ async def process_symbol(symbol, exchange, num_candles, timeframe, semaphore, te
     )
     return message, target_volume >= volume_threshold and target_change > 0
 
-# 비동기 방식: 숏 포지션 오픈 시뮬레이션 (rate limit 처리 포함)
+# 숏 포지션 오픈 시뮬레이션 (비동기, rate limit 처리 포함)
 async def open_short_position_simulation(exchange, symbol, margin_usd, open_positions, semaphore, telegram_token, chat_id):
     while True:
         try:
@@ -194,7 +219,7 @@ async def open_short_position_simulation(exchange, symbol, margin_usd, open_posi
     })
     return simulated_order, fee_open
 
-# 비동기 방식: 포지션 청산 시뮬레이션 (rate limit 처리 포함)
+# 포지션 청산 시뮬레이션 (비동기, rate limit 처리 포함)
 async def close_position_simulation(exchange, position, semaphore, telegram_token, chat_id):
     while True:
         try:
@@ -241,9 +266,9 @@ async def manage_open_positions(open_positions, exchange, telegram_token, chat_i
             try:
                 order, profit, fee_close = await close_position_simulation(exchange, position, semaphore, telegram_token, chat_id)
                 simulated_total_profit += profit
-                accumulated_fee += fee_close  # 청산 시 발생한 수수료 누적
+                accumulated_fee += fee_close
                 open_positions.remove(position)
-                profit_rate = (simulated_total_profit / total_seed) * 100  # 누적 수익률 계산 (전체 시드 기준)
+                profit_rate = (simulated_total_profit / total_seed) * 100
                 await log_and_notify(
                     f"포지션 청산: {position['symbol']} / 수익: {profit:.2f} USD / 누적 수익: {simulated_total_profit:.2f} USD / "
                     f"누적 수익률: {profit_rate:.2f}% / 누적 수수료: {accumulated_fee:.4f} USD",
@@ -272,6 +297,9 @@ async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles, 
                 valid_symbols.append(symbol)
     return valid_symbols
 
+# ---------------------------
+# 메인 실행 함수
+# ---------------------------
 async def main():
     # 텔레그램 관련 설정 (토큰과 채팅 ID 입력)
     telegram_token = ""  # 여기에 텔레그램 봇 토큰 입력
@@ -382,7 +410,7 @@ async def main():
                 result = await open_short_position_simulation(exchange, symbol, entry_amount_usd, open_positions, semaphore, telegram_token, chat_id)
                 if result:
                     order, fee_open = result
-                    accumulated_fee += fee_open  # 포지션 오픈 시 발생한 수수료 누적
+                    accumulated_fee += fee_open
                     await log_and_notify(
                         f"Simulated short position opened for {symbol}: {order}. Open fee: {fee_open:.4f} USD / 누적 수수료: {accumulated_fee:.4f} USD",
                         telegram_token,
