@@ -50,9 +50,9 @@ async def send_profit_graph(telegram_token, chat_id):
     plt.figure(figsize=(12, 6))
     plt.style.use("seaborn-darkgrid")
     plt.plot(times, profits, marker='D', color='blue', linestyle='-', linewidth=2, markersize=6)
-    plt.title("누적 수익률", fontsize=16)
-    plt.xlabel("시간", fontsize=14)
-    plt.ylabel("누적 수익 (USD)", fontsize=14)
+    plt.title("Dong's System Trading Result", fontsize=16)
+    plt.xlabel("Time", fontsize=14)
+    plt.ylabel("Total Profit (USD)", fontsize=14)
     
     # X축: 최소값은 profit_history의 첫 번째 시간, 최대값은 현재 시각
     x_min = times[0]
