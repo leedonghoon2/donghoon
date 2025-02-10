@@ -297,4 +297,123 @@ async def main():
         initial_start_time = datetime.strptime(initial_start_str, "%Y-%m-%d %H:%M:%S")
         now = datetime.now()
         if now < initial_start_time:
-            wait_time = (initial_start
+            wait_time = (initial_start_time - now).total_seconds()
+            await log_and_notify(
+                f"최초 실행 시각까지 {wait_time:.2f}초 대기합니다. (최초 실행 시각: {initial_start_time.strftime('%Y-%m-%d %H:%M:%S')})",
+                telegram_token,
+                chat_id
+            )
+            await asyncio.sleep(wait_time)
+    now = datetime.now()
+    cycle_start = now.replace(minute=0, second=0, microsecond=0)
+    await log_and_notify(f"최초 사이클 시작 시각: {cycle_start.strftime('%Y-%m-%d %H:%M:%S')}", telegram_token, chat_id)
+    
+    # 바이낸스 선물 클라이언트 초기화 (비동기, enableRateLimit 옵션 포함)
+    exchange = ccxt.binance({
+        'apiKey': api_key,
+        'secret': api_secret,
+        'enableRateLimit': True,
+        'options': {'defaultType': 'future'},
+    })
+    await exchange.load_markets()
+    
+    binance_symbols = []
+    for symbol in exchange.symbols:
+        try:
+            market = exchange.market(symbol)
+            if symbol.endswith('USDT') and market['info']['contractType'] == 'PERPETUAL':
+                standardized_symbol = symbol.split(':')[0]
+                binance_symbols.append(standardized_symbol)
+        except Exception as e:
+            print(f"Error processing symbol {symbol}: {e}")
+    binance_symbols = list(set(binance_symbols))
+    
+    open_positions = []
+    mismatched_symbols = []
+    
+    # 동시에 실행되는 API 호출 수를 제한하기 위한 semaphore (예: 최대 10개)
+    semaphore = asyncio.Semaphore(10)
+    
+    # 텔레그램 업데이트 폴링 작업을 백그라운드에서 시작
+    telegram_poll_task = asyncio.create_task(poll_telegram_updates(telegram_token, chat_id))
+    
+    while True:
+        await log_and_notify(f"사이클 시작 시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", telegram_token, chat_id)
+        
+        # 각 심볼의 캔들 데이터를 병렬로 처리 (비동기, semaphore, telegram 정보 전달)
+        tasks = [
+            process_symbol(symbol, exchange, num_candles, candle_timeframe, semaphore, telegram_token, chat_id)
+            for symbol in binance_symbols
+        ]
+        results = await asyncio.gather(*tasks)
+        
+        trading_list = []
+        for result in results:
+            if result is None:
+                continue
+            message, is_trading_candidate = result
+            if message:
+                symbol_name = message.split(' ')[0]
+                if is_trading_candidate:
+                    trading_list.append(symbol_name)
+                else:
+                    mismatched_symbols.append(symbol_name)
+        
+        # 시간 불일치 심볼 재검증 (비동기, semaphore 및 telegram 정보 전달)
+        resolved_symbols = await recheck_mismatched_symbols(
+            mismatched_symbols, exchange, num_candles, candle_timeframe, semaphore, telegram_token, chat_id
+        )
+        trading_list.extend(resolved_symbols)
+        
+        # 거래 후보 리스트 중복 제거 (순서 유지)
+        trading_list = list(dict.fromkeys(trading_list))
+        
+        await log_and_notify(f"Trading candidates: {trading_list}", telegram_token, chat_id)
+        
+        # 한 사이클에 거래 후보가 15개 이상이면 신규 매수 진행하지 않음
+        if len(trading_list) >= 15:
+            await log_and_notify(
+                f"매매 대상 코인이 {len(trading_list)}개 발생하여 이번 사이클은 신규 매수를 진행하지 않습니다.",
+                telegram_token,
+                chat_id
+            )
+        else:
+            for symbol in trading_list:
+                result = await open_short_position_simulation(exchange, symbol, entry_amount_usd, open_positions, semaphore, telegram_token, chat_id)
+                if result:
+                    order, fee_open = result
+                    accumulated_fee += fee_open  # 포지션 오픈 시 발생한 수수료 누적
+                    await log_and_notify(
+                        f"Simulated short position opened for {symbol}: {order}. Open fee: {fee_open:.4f} USD / 누적 수수료: {accumulated_fee:.4f} USD",
+                        telegram_token,
+                        chat_id
+                    )
+        
+        # 열린 포지션 관리 (청산 및 누적 수익, 누적 수수료 업데이트)
+        simulated_total_profit, accumulated_fee = await manage_open_positions(
+            open_positions, exchange, telegram_token, chat_id,
+            simulated_total_profit, total_seed, accumulated_fee, semaphore
+        )
+        
+        # 매 사이클마다 현재 누적 수익을 기록 (profit_history 업데이트)
+        profit_history.append((datetime.now(), simulated_total_profit))
+        
+        # 사이클 끝나면 mismatched_symbols 초기화
+        mismatched_symbols.clear()
+        
+        # 다음 사이클을 매 정각에 시작하도록 계산
+        now = datetime.now()
+        next_run_time = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        wait_time = (next_run_time - now).total_seconds()
+        await log_and_notify(
+            f"다음 사이클까지 {wait_time:.2f}초 대기합니다. (다음 실행 시각: {next_run_time.strftime('%Y-%m-%d %H:%M:%S')})",
+            telegram_token,
+            chat_id
+        )
+        await asyncio.sleep(wait_time)
+    
+    # 무한 루프이므로 종료 시 exchange 연결 정리(필요시)
+    # await exchange.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
