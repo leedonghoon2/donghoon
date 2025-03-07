@@ -319,11 +319,11 @@ async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles, 
 # 메인 실행 함수
 # ---------------------------
 async def main():
-    telegram_token = ""  # 텔레그램 봇 토큰
-    chat_id = ""         # 텔레그램 채팅 ID
+    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5ouwb"  # 텔레그램 봇 토큰
+    chat_id = "1496944404"         # 텔레그램 채팅 ID
     
-    api_key = ""
-    api_secret = ""
+    api_key = "3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fsqu2"
+    api_secret = "hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziH1hF"
     
     # entry_amount_usd를 딕셔너리로 관리하여 동적으로 업데이트 가능하도록 함
     config = {"entry_amount_usd": 100}
