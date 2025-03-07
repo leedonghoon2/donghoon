@@ -11,11 +11,13 @@ from binance.um_futures import UMFutures
 from binance.lib.utils import config_logging
 from binance.error import ClientError
 
-# 추가: 동기 방식으로 Binance REST API의 leverageBracket 엔드포인트를 호출하기 위한 함수
+# 추가: Binance REST API의 leverageBracket 엔드포인트를 호출하는 함수
 def get_leverage_bracket(symbol, api_key, secret):
     import time, hmac, hashlib, requests
     base_url = "https://fapi.binance.com"
     endpoint = "/fapi/v1/leverageBracket"
+    # Binance 선물 API는 심볼을 슬래시 없이 받으므로 제거합니다.
+    symbol = symbol.replace("/", "")
     timestamp = int(time.time() * 1000)
     query_string = f"symbol={symbol}&timestamp={timestamp}"
     signature = hmac.new(secret.encode(), query_string.encode(), hashlib.sha256).hexdigest()
@@ -194,7 +196,7 @@ async def process_symbol(symbol, exchange, num_candles, timeframe, semaphore, te
 
 # 수정된 open_short_position 함수:
 # 신규 주문 전에 해당 종목의 최대 허용 레버리지 한도를 REST API를 통해 조회하여,
-# 만약 최대 허용 레버리지가 20배 이상이면 20배로, 그렇지 않으면 최대 허용치로 설정하고 주문을 진행합니다.
+# 만약 최대 허용 레버리지가 20배 이상이면 20배로, 그렇지 않으면 최대 허용치로 설정한 후 주문을 진행합니다.
 async def open_short_position(exchange, symbol, margin_usd, open_positions, semaphore, telegram_token, chat_id, umf_client, api_key, api_secret):
     # 티커 조회로 가격 확보
     while True:
@@ -335,6 +337,7 @@ async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles, 
 # 메인 실행 함수
 # ---------------------------
 async def main():
+    # 요청하신 설정값
     telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5osja"  # 텔레그램 봇 토큰
     chat_id = "1496944404"         # 텔레그램 채팅 ID
     
