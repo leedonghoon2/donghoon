@@ -11,6 +11,22 @@ from binance.um_futures import UMFutures
 from binance.lib.utils import config_logging
 from binance.error import ClientError
 
+# 추가: 동기 방식으로 Binance REST API의 leverageBracket 엔드포인트를 호출하기 위한 함수
+def get_leverage_bracket(symbol, api_key, secret):
+    import time, hmac, hashlib, requests
+    base_url = "https://fapi.binance.com"
+    endpoint = "/fapi/v1/leverageBracket"
+    timestamp = int(time.time() * 1000)
+    query_string = f"symbol={symbol}&timestamp={timestamp}"
+    signature = hmac.new(secret.encode(), query_string.encode(), hashlib.sha256).hexdigest()
+    url = f"{base_url}{endpoint}?{query_string}&signature={signature}"
+    headers = {
+        "X-MBX-APIKEY": api_key
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
 # 누적 수익 데이터를 기록할 리스트 (각 항목: (시간, 누적 수익 (USD)))
 profit_history = []
 
@@ -177,9 +193,9 @@ async def process_symbol(symbol, exchange, num_candles, timeframe, semaphore, te
     return message, target_volume >= volume_threshold and target_change > 0
 
 # 수정된 open_short_position 함수:
-# 신규 주문 전에 해당 종목의 최대 허용 레버리지 한도를 UMFutures를 통해 조회한 후,
+# 신규 주문 전에 해당 종목의 최대 허용 레버리지 한도를 REST API를 통해 조회하여,
 # 만약 최대 허용 레버리지가 20배 이상이면 20배로, 그렇지 않으면 최대 허용치로 설정하고 주문을 진행합니다.
-async def open_short_position(exchange, symbol, margin_usd, open_positions, semaphore, telegram_token, chat_id, umf_client):
+async def open_short_position(exchange, symbol, margin_usd, open_positions, semaphore, telegram_token, chat_id, umf_client, api_key, api_secret):
     # 티커 조회로 가격 확보
     while True:
         try:
@@ -201,18 +217,16 @@ async def open_short_position(exchange, symbol, margin_usd, open_positions, sema
     price = ticker['last']
     amount = margin_usd / price
 
-    # 해당 종목의 최대 허용 레버리지 조회 (UMFutures로 직접 GET 요청)
+    # 해당 종목의 최대 허용 레버리지 조회 (직접 REST API 호출)
     try:
-        brackets = await asyncio.to_thread(
-            lambda: umf_client.request("GET", "/fapi/v1/leverageBracket", params={"symbol": symbol})
-        )
+        brackets = await asyncio.to_thread(get_leverage_bracket, symbol, api_key, api_secret)
         max_allowed = None
         if brackets and isinstance(brackets, list) and len(brackets) > 0:
             symbol_brackets = brackets[0].get('brackets', [])
             if symbol_brackets and len(symbol_brackets) > 0:
                 max_allowed = symbol_brackets[0].get('initialLeverage')
         if max_allowed is not None:
-            # 만약 최대 허용 레버리지가 20배 이상이면 20배, 그렇지 않으면 최대 허용치로 설정
+            # 최대 허용 레버리지가 20배 이상이면 20배, 아니면 최대 허용치로 설정
             desired_leverage = 20 if max_allowed >= 20 else max_allowed
             await log_and_notify(f"{symbol} 최대 허용 레버리지가 {max_allowed}배이므로, {desired_leverage}배로 설정합니다.", telegram_token, chat_id)
             await asyncio.to_thread(umf_client.change_leverage, symbol=symbol, leverage=desired_leverage, recvWindow=6000)
@@ -220,7 +234,7 @@ async def open_short_position(exchange, symbol, margin_usd, open_positions, sema
             await log_and_notify(f"{symbol}의 최대 허용 레버리지를 조회하지 못했습니다. 기본값으로 진행합니다.", telegram_token, chat_id)
     except Exception as e:
         await log_and_notify(f"Leverage update check failed for {symbol}: {e}", telegram_token, chat_id)
-        # 여기서 주문 취소 또는 기본값으로 진행할 수 있습니다.
+        # 필요에 따라 여기서 주문을 취소할 수 있습니다.
     
     # 시장가 주문 실행 (숏 포지션 오픈)
     try:
@@ -321,11 +335,11 @@ async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles, 
 # 메인 실행 함수
 # ---------------------------
 async def main():
-    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5ofjs"  # 텔레그램 봇 토큰
+    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5osja"  # 텔레그램 봇 토큰
     chat_id = "1496944404"         # 텔레그램 채팅 ID
     
-    api_key = "3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fsdjs"
-    api_secret = "hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziHsjd"
+    api_key = "3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fssja"
+    api_secret = "hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziHdjs"
     
     # entry_amount_usd를 딕셔너리로 관리하여 동적으로 업데이트 가능하도록 함
     config = {"entry_amount_usd": 50}
@@ -418,7 +432,7 @@ async def main():
             )
         else:
             for symbol in trading_list:
-                result = await open_short_position(exchange, symbol, config["entry_amount_usd"], open_positions, semaphore, telegram_token, chat_id, umf_client)
+                result = await open_short_position(exchange, symbol, config["entry_amount_usd"], open_positions, semaphore, telegram_token, chat_id, umf_client, api_key, api_secret)
                 if result:
                     order, fee_open = result
                     accumulated_fee += fee_open
