@@ -6,14 +6,17 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from io import BytesIO
 
+# UMFutures 라이브러리 (binance-futures-connector)
+from binance.um_futures import UMFutures
+from binance.lib.utils import config_logging
+from binance.error import ClientError
+
 # 누적 수익 데이터를 기록할 리스트 (각 항목: (시간, 누적 수익 (USD)))
 profit_history = []
 
 # ---------------------------
 # 텔레그램 관련 함수들
 # ---------------------------
-
-# 텔레그램 메시지 전송 함수
 async def send_telegram_message(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
@@ -22,7 +25,6 @@ async def send_telegram_message(token, chat_id, message):
             if response.status != 200:
                 print(f"Telegram message failed: {response.status}")
 
-# 텔레그램 사진(그래프) 전송 함수
 async def send_telegram_photo(token, chat_id, photo_bytes, caption=""):
     url = f"https://api.telegram.org/bot{token}/sendPhoto"
     data = aiohttp.FormData()
@@ -38,7 +40,6 @@ async def log_and_notify(message, telegram_token, chat_id):
     print(message)
     await send_telegram_message(telegram_token, chat_id, message)
 
-# 누적 수익률 그래프 생성 및 전송 함수 (X축, Y축 범위 지정 포함)
 async def send_profit_graph(telegram_token, chat_id):
     if not profit_history:
         await send_telegram_message(telegram_token, chat_id, "누적 수익 데이터가 없습니다.")
@@ -69,9 +70,6 @@ async def send_profit_graph(telegram_token, chat_id):
     plt.close()
     await send_telegram_photo(telegram_token, chat_id, buf.read(), caption="누적 수익률 그래프")
 
-# 텔레그램 업데이트 폴링 함수  
-# “수익률 확인” -> 누적 수익 그래프 전송  
-# “진입금액 변경” -> “몇 달러로 변경하시겠습니까?” 응답 후, “XXX달러” 메시지로 진입금액 업데이트
 async def poll_telegram_updates(telegram_token, chat_id, config):
     waiting_for_entry_change = False
     last_update_id = None
@@ -90,14 +88,11 @@ async def poll_telegram_updates(telegram_token, chat_id, config):
                                 last_update_id = update["update_id"]
                                 if "message" in update:
                                     text = update["message"].get("text", "").strip()
-                                    # 누적 수익률 그래프 요청
                                     if text == "수익률 확인":
                                         await send_profit_graph(telegram_token, chat_id)
-                                    # 진입금액 변경 명령 감지
                                     elif text == "진입금액 변경" and not waiting_for_entry_change:
                                         await send_telegram_message(telegram_token, chat_id, "몇 달러로 변경하시겠습니까?")
                                         waiting_for_entry_change = True
-                                    # 사용자가 XXX달러 형식으로 응답한 경우
                                     elif waiting_for_entry_change and text.endswith("달러"):
                                         amount_str = text.replace("달러", "").strip()
                                         try:
@@ -114,7 +109,6 @@ async def poll_telegram_updates(telegram_token, chat_id, config):
 # ---------------------------
 # 거래 관련 함수들
 # ---------------------------
-
 def get_timeframe_timedelta(timeframe_str):
     try:
         num = int(timeframe_str[:-1])
@@ -183,10 +177,10 @@ async def process_symbol(symbol, exchange, num_candles, timeframe, semaphore, te
     return message, target_volume >= volume_threshold and target_change > 0
 
 # 수정된 open_short_position 함수:
-# -2027 에러 발생 시, 해당 종목의 최대 허용 레버리지를 조회하여,
-# 만약 그 값이 20배 미만이면 그 값으로 레버리지를 업데이트하고,
-# 텔레그램 알림 전송 후 주문을 재시도합니다.
-async def open_short_position(exchange, symbol, margin_usd, open_positions, semaphore, telegram_token, chat_id):
+# 신규 주문 전에 해당 종목의 최대 허용 레버리지 한도를 UMFutures를 통해 조회하여,
+# 만약 최대 허용 레버리지가 20배 이상이면 20배로, 그 미만이면 최대 허용치로 설정한 후 주문을 진행합니다.
+async def open_short_position(exchange, symbol, margin_usd, open_positions, semaphore, telegram_token, chat_id, umf_client):
+    # 티커 조회로 가격 확보
     while True:
         try:
             async with semaphore:
@@ -206,39 +200,34 @@ async def open_short_position(exchange, symbol, margin_usd, open_positions, sema
                 return None
     price = ticker['last']
     amount = margin_usd / price
+
+    # 해당 종목의 최대 허용 레버리지를 조회하여 원하는 값으로 설정
+    try:
+        brackets = await asyncio.to_thread(umf_client.leverage_bracket, symbol=symbol)
+        max_allowed = None
+        if brackets and len(brackets) > 0:
+            symbol_brackets = brackets[0].get('brackets', [])
+            if symbol_brackets and len(symbol_brackets) > 0:
+                max_allowed = symbol_brackets[0].get('initialLeverage')
+        if max_allowed is not None:
+            # 최대 허용 레버리지가 20배 이상이면 20배로, 아니면 최대 허용치로 설정
+            desired_leverage = 20 if max_allowed >= 20 else max_allowed
+            await log_and_notify(f"{symbol} 최대 허용 레버리지가 {max_allowed}배이므로, {desired_leverage}배로 설정합니다.", telegram_token, chat_id)
+            await asyncio.to_thread(umf_client.change_leverage, symbol=symbol, leverage=desired_leverage, recvWindow=6000)
+        else:
+            await log_and_notify(f"{symbol}의 최대 허용 레버리지를 조회하지 못했습니다. 기본값으로 진행합니다.", telegram_token, chat_id)
+    except Exception as e:
+        await log_and_notify(f"Leverage update check failed for {symbol}: {e}", telegram_token, chat_id)
+        # 필요에 따라 여기서 주문을 취소할 수 있습니다.
+
+    # 시장가 주문 실행 (숏 포지션 오픈)
     try:
         async with semaphore:
             order = await exchange.create_order(symbol, type='market', side='sell', amount=amount)
+        await log_and_notify(f"{symbol}의 포지션을 성공적으로 오픈했습니다.", telegram_token, chat_id)
     except Exception as e:
-        err_str = str(e)
-        # 에러 코드 -2027 감지 시 레버리지 수정 시도
-        if '"code":-2027' in err_str:
-            try:
-                # ccxt의 Binance 선물 API 엔드포인트를 사용하여 레버리지 브래킷 조회
-                brackets = await exchange.fapiPrivate_get_leverage_bracket({'symbol': symbol})
-                new_leverage = None
-                if brackets and len(brackets) > 0:
-                    symbol_brackets = brackets[0].get('brackets', [])
-                    if symbol_brackets and len(symbol_brackets) > 0:
-                        new_leverage = symbol_brackets[0].get('initialLeverage')
-                # 최대 허용 레버리지가 20 이상이거나 값을 가져오지 못하면 업데이트하지 않음.
-                if new_leverage is None or new_leverage >= 20:
-                    await log_and_notify(f"{symbol}의 최대 허용 레버리지가 20 이상이므로 레버리지 업데이트를 하지 않습니다.", telegram_token, chat_id)
-                    return None
-                # 레버리지 업데이트 전 텔레그램 알림 전송
-                await log_and_notify(f"{symbol}의 최대 허용 레버리지를 초과하여 해당 종목의 레버리지를 {new_leverage}배로 수정합니다.", telegram_token, chat_id)
-                # ccxt 엔드포인트를 사용하여 레버리지 업데이트 (POST /fapi/v1/leverage)
-                await exchange.fapiPrivate_post_leverage({'symbol': symbol, 'leverage': new_leverage})
-                await log_and_notify(f"{symbol}의 변경된 레버리지로 포지션 오픈을 재시도합니다.", telegram_token, chat_id)
-                async with semaphore:
-                    order = await exchange.create_order(symbol, type='market', side='sell', amount=amount)
-                await log_and_notify(f"{symbol}의 포지션 재오픈을 성공했습니다", telegram_token, chat_id)
-            except Exception as e2:
-                await log_and_notify(f"Failed to update leverage for {symbol}: {e2}", telegram_token, chat_id)
-                return None
-        else:
-            await log_and_notify(f"Failed to place short market order for {symbol}: {e}", telegram_token, chat_id)
-            return None
+        await log_and_notify(f"Failed to place short market order for {symbol}: {e}", telegram_token, chat_id)
+        return None
 
     fee_open = margin_usd * 0.0004
     open_positions.append({
@@ -253,7 +242,6 @@ async def open_short_position(exchange, symbol, margin_usd, open_positions, sema
     })
     return order, fee_open
 
-# 실제 포지션 청산 함수 (실제 시장가 주문 실행)
 async def close_position(exchange, position, semaphore, telegram_token, chat_id):
     while True:
         try:
@@ -370,6 +358,9 @@ async def main():
     })
     await exchange.load_markets()
     
+    # UMFutures 클라이언트 생성 (동기 라이브러리)
+    umf_client = UMFutures(key=api_key, secret=api_secret)
+    
     binance_symbols = []
     for symbol in exchange.symbols:
         try:
@@ -424,9 +415,8 @@ async def main():
                 chat_id
             )
         else:
-            # config["entry_amount_usd"] 값을 사용하여 주문 진행
             for symbol in trading_list:
-                result = await open_short_position(exchange, symbol, config["entry_amount_usd"], open_positions, semaphore, telegram_token, chat_id)
+                result = await open_short_position(exchange, symbol, config["entry_amount_usd"], open_positions, semaphore, telegram_token, chat_id, umf_client)
                 if result:
                     order, fee_open = result
                     accumulated_fee += fee_open
