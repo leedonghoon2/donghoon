@@ -177,8 +177,8 @@ async def process_symbol(symbol, exchange, num_candles, timeframe, semaphore, te
     return message, target_volume >= volume_threshold and target_change > 0
 
 # 수정된 open_short_position 함수:
-# 신규 주문 전에 해당 종목의 최대 허용 레버리지 한도를 UMFutures를 통해 조회하여,
-# 만약 최대 허용 레버리지가 20배 이상이면 20배로, 그 미만이면 최대 허용치로 설정한 후 주문을 진행합니다.
+# 신규 주문 전에 해당 종목의 최대 허용 레버리지 한도를 UMFutures를 통해 조회한 후,
+# 만약 최대 허용 레버리지가 20배 이상이면 20배로, 그렇지 않으면 최대 허용치로 설정하고 주문을 진행합니다.
 async def open_short_position(exchange, symbol, margin_usd, open_positions, semaphore, telegram_token, chat_id, umf_client):
     # 티커 조회로 가격 확보
     while True:
@@ -201,16 +201,18 @@ async def open_short_position(exchange, symbol, margin_usd, open_positions, sema
     price = ticker['last']
     amount = margin_usd / price
 
-    # 해당 종목의 최대 허용 레버리지를 조회하여 원하는 값으로 설정
+    # 해당 종목의 최대 허용 레버리지 조회 (UMFutures로 직접 GET 요청)
     try:
-        brackets = await asyncio.to_thread(umf_client.leverage_bracket, symbol=symbol)
+        brackets = await asyncio.to_thread(
+            lambda: umf_client.request("GET", "/fapi/v1/leverageBracket", params={"symbol": symbol})
+        )
         max_allowed = None
-        if brackets and len(brackets) > 0:
+        if brackets and isinstance(brackets, list) and len(brackets) > 0:
             symbol_brackets = brackets[0].get('brackets', [])
             if symbol_brackets and len(symbol_brackets) > 0:
                 max_allowed = symbol_brackets[0].get('initialLeverage')
         if max_allowed is not None:
-            # 최대 허용 레버리지가 20배 이상이면 20배로, 아니면 최대 허용치로 설정
+            # 만약 최대 허용 레버리지가 20배 이상이면 20배, 그렇지 않으면 최대 허용치로 설정
             desired_leverage = 20 if max_allowed >= 20 else max_allowed
             await log_and_notify(f"{symbol} 최대 허용 레버리지가 {max_allowed}배이므로, {desired_leverage}배로 설정합니다.", telegram_token, chat_id)
             await asyncio.to_thread(umf_client.change_leverage, symbol=symbol, leverage=desired_leverage, recvWindow=6000)
@@ -218,8 +220,8 @@ async def open_short_position(exchange, symbol, margin_usd, open_positions, sema
             await log_and_notify(f"{symbol}의 최대 허용 레버리지를 조회하지 못했습니다. 기본값으로 진행합니다.", telegram_token, chat_id)
     except Exception as e:
         await log_and_notify(f"Leverage update check failed for {symbol}: {e}", telegram_token, chat_id)
-        # 필요에 따라 여기서 주문을 취소할 수 있습니다.
-
+        # 여기서 주문 취소 또는 기본값으로 진행할 수 있습니다.
+    
     # 시장가 주문 실행 (숏 포지션 오픈)
     try:
         async with semaphore:
@@ -319,16 +321,16 @@ async def recheck_mismatched_symbols(mismatched_symbols, exchange, num_candles, 
 # 메인 실행 함수
 # ---------------------------
 async def main():
-    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5ouwb"  # 텔레그램 봇 토큰
+    telegram_token = "5976627458:AAGlqJZ2GQkvahNNN0ta6neqUWt8iBqwK5ofjs"  # 텔레그램 봇 토큰
     chat_id = "1496944404"         # 텔레그램 채팅 ID
     
-    api_key = "3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fsqu2"
-    api_secret = "hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziH1hF"
+    api_key = "3nGDvBWtRwmAmegDAePb55amY6PSBtxgdiDY8R40NTNt5TVuZVpQVXWt082za0Fsdjs"
+    api_secret = "hMq15AiZEvd4h5i21GCyToAKodtjrrNsA8c9Oq9Zxy2u7W27GAKT5M5HwYdr9ziHsjd"
     
     # entry_amount_usd를 딕셔너리로 관리하여 동적으로 업데이트 가능하도록 함
-    config = {"entry_amount_usd": 100}
+    config = {"entry_amount_usd": 50}
     num_candles = 7
-    total_seed = 300
+    total_seed = 154
     
     candle_timeframe = '1h'
     simulated_total_profit = 0
