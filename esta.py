@@ -1,4 +1,4 @@
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import time
 import os
 from PIL import Image
@@ -24,14 +24,14 @@ TARGET_DAY = "18"
 START_TIME = "09:00"
 END_TIME = "15:00"
 
-HEADLESS_MODE = True  # True = UI 없이 실행
+HEADLESS_MODE = True
 
 # ===== 이메일 설정 (네이버 SMTP) =====
 SMTP_SERVER = "smtp.naver.com"
 SMTP_PORT = 587
-EMAIL_SENDER = "your_naver_id@naver.com"   # 보내는 사람 네이버 메일
-EMAIL_PASSWORD = "your_password"           # 네이버 비밀번호
-EMAIL_RECEIVER = "target_email@example.com"  # 받을 메일 주소
+EMAIL_SENDER = "ehdgnss1346@naver.com"
+EMAIL_PASSWORD = "dnflrkwhr1234~"
+EMAIL_RECEIVER = "ehdgnss1346@naver.com"
 
 # ===== 이메일 전송 함수 =====
 def send_email_with_image(image_path):
@@ -40,7 +40,6 @@ def send_email_with_image(image_path):
     msg["To"] = EMAIL_RECEIVER
     msg["Subject"] = "결제창 캡처 이미지"
 
-    # 첨부파일 추가
     with open(image_path, "rb") as f:
         part = MIMEBase("application", "octet-stream")
         part.set_payload(f.read())
@@ -51,9 +50,8 @@ def send_email_with_image(image_path):
         )
         msg.attach(part)
 
-    # SMTP 연결 후 전송
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server.starttls()  # TLS 보안 연결
+        server.starttls()
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
         server.send_message(msg)
 
@@ -69,11 +67,32 @@ def time_in_range(t_str, start_str, end_str):
     e_val = e_h * 60 + e_m
     return s_val <= t_val <= e_val
 
+# ===== 안전 대기 + 클릭 함수 =====
+def safe_wait_click(page, locator_str, description, timeout=30000):
+    try:
+        locator = page.locator(locator_str)
+        locator.wait_for(state="visible", timeout=timeout)
+        locator.click()
+    except PlaywrightTimeoutError:
+        html_path = os.path.join(os.getcwd(), "debug_dump.html")
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(page.content())
+        print(f"❌ [{description}] 요소를 {timeout/1000}초 내에 찾지 못했습니다.")
+        print(f"💾 현재 페이지 HTML을 저장했습니다: {html_path}")
+        raise
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=HEADLESS_MODE, args=["--start-maximized"])
-    
-    # Cloudflare 우회 세팅
+    browser = p.chromium.launch(
+        headless=HEADLESS_MODE,
+        args=[
+            "--start-maximized",
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-blink-features=AutomationControlled"
+        ]
+    )
+
     context = browser.new_context(
         locale="ko-KR",
         viewport=None,
@@ -85,7 +104,7 @@ with sync_playwright() as p:
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
         Object.defineProperty(navigator, 'languages', { get: () => ['ko-KR', 'ko'] });
     """)
-    
+
     page = context.new_page()
 
     # 0️⃣ 로그인 페이지
@@ -93,21 +112,20 @@ with sync_playwright() as p:
     page.wait_for_selector("#PNWHB00001_userId", state="visible")
     page.fill("#PNWHB00001_userId", LOGIN_ID)
     page.fill("#PNWHB00001_userPw", LOGIN_PW)
-    page.locator("#PNWHB00001_logonForm").get_by_role("link", name="로그인").click()
-    time.sleep(1)  # 로그인 처리 대기
+    safe_wait_click(page, "#PNWHB00001_logonForm a:has-text('로그인')", "로그인 버튼")
+    time.sleep(1)
 
     # 1️⃣ 검색 페이지
     page.goto("https://main.eastarjet.com/search", timeout=60000)
-    page.get_by_role("tab", name="편도").wait_for(state="visible")
-    page.get_by_role("tab", name="편도").click()
+    safe_wait_click(page, "button:has-text('편도')", "편도 버튼")
 
     # 2️⃣ 출발지 선택
-    page.get_by_role("button", name=DEPARTURE_BUTTON_NAME).click()
+    safe_wait_click(page, f"button:has-text('{DEPARTURE_BUTTON_NAME}')", "출발지 버튼")
     page.wait_for_selector('div[role="dialog"][data-state="open"] button', state="visible")
     dep_popup = page.locator('div[role="dialog"][data-state="open"]')
     dep_popup.locator(f"button:has-text('{DEPARTURE_CODE}')").click()
 
-    # 3️⃣ 도착지 선택 → 자동 달력 열림
+    # 3️⃣ 도착지 선택
     dep_popup = page.locator('div[role="dialog"][data-state="open"]')
     dep_popup.locator(f"button:has-text('{ARRIVAL_CODE}')").click()
 
@@ -132,13 +150,11 @@ with sync_playwright() as p:
 
     # 날짜 선택
     target_selector = f'[data-day="{TARGET_YEAR}-{TARGET_MONTH:02d}-{int(TARGET_DAY):02d}"] button'
-    page.locator(target_selector).wait_for(state="visible")
-    page.locator(target_selector).click()
-    page.get_by_role("button", name="선택").click()
+    safe_wait_click(page, target_selector, "날짜 버튼")
+    safe_wait_click(page, "button:has-text('선택')", "선택 버튼")
 
     # 4️⃣ 검색
-    page.get_by_role("button", name="검색").wait_for(state="visible")
-    page.get_by_role("button", name="검색").click()
+    safe_wait_click(page, "button:has-text('검색')", "검색 버튼")
 
     # 5️⃣ 최저가 선택
     page.locator("div.relative.my-2.flex").first.wait_for(state="visible")
@@ -160,36 +176,28 @@ with sync_playwright() as p:
                         min_button = btn
     if min_button:
         min_button.click()
-        page.get_by_role("button", name="탑승객 정보 입력").wait_for(state="visible")
-        page.get_by_role("button", name="탑승객 정보 입력").click()
+        safe_wait_click(page, "button:has-text('탑승객 정보 입력')", "탑승객 정보 입력 버튼")
     else:
         print("⚠️ 조건에 맞는 항공편이 없습니다.")
         browser.close()
         exit()
 
     # 8️⃣ 부가서비스 → 결제
-    page.get_by_text("부가서비스 선택", exact=True).wait_for(state="visible")
-    page.get_by_text("부가서비스 선택", exact=True).click()
-    page.get_by_text("바로 결제", exact=True).wait_for(state="visible")
-    page.get_by_text("바로 결제", exact=True).click()
+    safe_wait_click(page, "text=부가서비스 선택", "부가서비스 선택 버튼")
+    safe_wait_click(page, "text=바로 결제", "바로 결제 버튼")
     page.locator('button[role="checkbox"]').first.wait_for(state="visible")
     page.locator('button[role="checkbox"]').first.click()
-    page.get_by_role("button", name="아래로 스크롤").wait_for(state="visible")
-    page.get_by_role("button", name="아래로 스크롤").click()
-    page.get_by_role("button", name="확인").wait_for(state="visible")
-    page.get_by_role("button", name="확인").click()
-    page.get_by_role("button", name="아래로 스크롤").wait_for(state="visible")
-    page.get_by_role("button", name="아래로 스크롤").click()
-    page.get_by_role("button", name="확인").wait_for(state="visible")
-    page.get_by_role("button", name="확인").click()
-    page.get_by_role("button", name="결제하기").wait_for(state="visible")
-    page.get_by_role("button", name="결제하기").click()
+    safe_wait_click(page, "button:has-text('아래로 스크롤')", "아래로 스크롤 버튼")
+    safe_wait_click(page, "button:has-text('확인')", "확인 버튼")
+    safe_wait_click(page, "button:has-text('아래로 스크롤')", "아래로 스크롤 버튼")
+    safe_wait_click(page, "button:has-text('확인')", "확인 버튼")
+    safe_wait_click(page, "button:has-text('결제하기')", "결제하기 버튼")
     page.locator('button[value="kakao"]').wait_for(state="visible")
     page.locator('button[value="kakao"]').click()
 
     with context.expect_page() as popup_info:
-        page.get_by_role("button", name="결제하기").click()
-    
+        safe_wait_click(page, "button:has-text('결제하기')", "결제하기 버튼")
+
     time.sleep(1)
     payment_page = popup_info.value
     payment_page.wait_for_load_state("domcontentloaded")
@@ -197,7 +205,5 @@ with sync_playwright() as p:
     payment_page.screenshot(path=screenshot_path, full_page=True)
     print(f"📸 결제창 캡처 완료: {screenshot_path}")
 
-    # 캡처 이미지를 네이버 메일로 전송
     send_email_with_image(screenshot_path)
-
     print("✅ 성공적으로 결제 단계까지 진행 및 이메일 발송 완료")
