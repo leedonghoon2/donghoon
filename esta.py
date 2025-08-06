@@ -8,8 +8,8 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 # ===== 로그인 정보 =====
-LOGIN_ID = ""
-LOGIN_PW = ""
+LOGIN_ID = "ehdgnss1346"
+LOGIN_PW = "dnflrkwhr12@"
 
 # ===== 사전 설정 =====
 DEPARTURE_BUTTON_NAME = "서울(모든 공항)"
